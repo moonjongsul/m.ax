@@ -19,10 +19,10 @@ def _publisher(node: Node, topic: str, msg_type):
         10
     )
     
-def convert_joint_state_to_array(msg: JointState):
+def convert_joint_states_to_array(msg: JointState):
     return msg.position
 
-def convert_array_to_joint_state(array, joint_names):
+def convert_array_to_joint_states(array, joint_names):
     msg = JointState()
     msg.header = Header()
     msg.name = joint_names

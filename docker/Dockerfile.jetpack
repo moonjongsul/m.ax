@@ -109,15 +109,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ---- User 설정 ----
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
-    && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
-    && echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USERNAME/.bashrc \
-    && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/$USERNAME/.bashrc
+    && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
 
 # ---- pip 업그레이드 (root) ----
 RUN python -m pip install --upgrade pip wheel --ignore-installed
-
-# ---- User 전환 ----
-USER $USERNAME
 
 # ---- lerobot (user 소유로 복사 및 설치) ----
 RUN mkdir -p ${WORKSPACE}/m.ax/thirdparty
@@ -128,10 +123,18 @@ RUN cd ${WORKSPACE}/m.ax/thirdparty/lerobot && \
     pip install -e ".[smolvla, pi]"
 
 RUN pip install --no-cache-dir \
-    ffmpeg torchcodec omegaconf pyzmq msgpack msgpack-numpy streamlit
+    ffmpeg torchcodec omegaconf wandb pyzmq msgpack msgpack-numpy streamlit
+
+# ---- User 전환 ----
+USER $USERNAME
 
 # ---- 쉘 환경 설정 ----
 RUN echo "" >> ~/.bashrc && \
+    echo "export ROS_DOMAIN_ID=0" >> ~/.bashrc && \
+    echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> ~/.bashrc && \
+    echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
+    echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc && \
+    echo "" >> ~/.bashrc && \
     echo "export PS1='\[\e[1;31m\][M.AX]\[\e[0m\] \[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '" >> ~/.bashrc && \
     echo "export LS_COLORS='di=1;97;42:ow=1;97;42:tw=1;97;42'" >> ~/.bashrc && \
     echo "" >> ~/.bashrc && \
@@ -150,7 +153,6 @@ RUN rm -rf ~/.cursor-server
 
 ENV PYTHONUNBUFFERED=1 \
     TOKENIZERS_PARALLELISM=false \
-    HF_HOME=/home/${USERNAME}/.cache/huggingface \
     CUDA_HOME=/usr/local/cuda
 
 WORKDIR ${WORKSPACE}

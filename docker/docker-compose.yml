@@ -36,9 +36,10 @@ services:
       - ${HOME}/datasets:/workspace/datasets:rw
       - /media:/media:rw
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - ${HOME}/.cache/huggingface:${HOME}/.cache/huggingface:rw
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
       - /dev/shm:/dev/shm
-      - ${HOME}/.ssh:/root/.ssh:ro
-      - ${HOME}/.gitconfig:/root/.gitconfig:ro
+      - ${HOME}/.cache/huggingface:${HOME}/.cache/huggingface:rw
+      - ${HOME}/.ssh:${HOME}/.ssh:rw
+      - ${HOME}/.gitconfig:${HOME}/.gitconfig:rw
+      - ${HOME}/.git-credentials:${HOME}/.git-credentials:rw
