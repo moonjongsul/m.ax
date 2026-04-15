@@ -1,0 +1,71 @@
+env:
+  robot:
+    type: 'fr3'
+    ip: '172.16.0.2'
+    comm: 'ros2'
+    topic:
+      subscribe: 
+        joint_states: 
+          name: '/joint_states'
+          type: 'sensor_msgs/JointState'
+          hz: 30
+      publish: 
+        joint_states: 
+          name: '/gello/joint_command'
+          type: 'sensor_msgs/JointState'
+          hz: 30
+    pose:
+      home: [0, -1.57, 0, -1.57, 0, 0, 0] # joint space
+  gripper:
+    type: 'dxl_parallel_gripper'
+    comm: 'ros2'
+    topic:
+      subscribe: 
+        joint_states: 
+          name: '/gripper/joint_states'
+          type: 'sensor_msgs/JointState'
+          hz: 30
+      publish: 
+        command: 
+          name: '/gripper/command'
+          type: 'std_msgs/float32'
+          hz: 30
+  camera:
+    camera_1:
+      type: 'realsense'
+      model: 'd405'      
+      name: 'wrist_front'
+      port: /dev/video0
+      serial: ''
+      size: [848, 480]
+      rotate: 0
+    camera_2:
+      type: 'realsense'
+      model: 'd405'
+      name: 'wrist_rear'
+      port: /dev/video1
+      serial: ''
+      size: [848, 480]
+      rotate: 180
+    camera_3:
+      type: 'orbbec'
+      model: 'gemini2'
+      name: 'front_view'
+      port: /dev/video2
+      serial: ''
+      size: [1280, 720]
+      rotate: 0
+    camera_4:
+      type: 'orbbec'
+      model: 'gemini2'
+      name: 'side_view'
+      port: /dev/video3
+      serial: ''
+      size: [1280, 720]
+      rotate: 0
+
+model:
+  type: 'vla'
+  name: 'pi0.5'
+
+  

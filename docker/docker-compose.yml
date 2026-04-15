@@ -1,0 +1,44 @@
+services:
+  max:
+    container_name: ${CONTAINER_NAME}
+    image: ${IMAGE_NAME}
+    stdin_open: true
+    tty: true
+    command: tail -f /dev/null
+    ipc: host
+    cap_add:
+      - SYS_NICE
+    ulimits:
+      rtprio: 99
+      rttime: -1
+      memlock: -1
+      stack: 67108864
+    network_mode: host
+    privileged: true
+    runtime: nvidia
+
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,display
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - HF_HOME=/root/.cache/huggingface
+      - PYTHONUNBUFFERED=1
+      - TOKENIZERS_PARALLELISM=false
+      - MASTER_ADDR=127.0.0.1
+      - CUDA_HOME=/usr/local/cuda
+      - TORCH_NCCL_ASYNC_ERROR_HANDLING=1
+
+    volumes:
+      # - /mnt/synology/RobotData:/mnt/synology
+      - ${M_AX_ROOT:-.}:/workspace/m.ax:rw
+      - ${HOME}/datasets:/workspace/datasets:rw
+      - /media:/media:rw
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ${HOME}/.cache/huggingface:/root/.cache/huggingface:rw
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /dev/shm:/dev/shm
+      - ${HOME}/.ssh:/root/.ssh:ro
+      - ${HOME}/.gitconfig:/root/.gitconfig:ro

@@ -1,0 +1,78 @@
+ARG NGC_IMAGE=pytorch:25.12-py3
+
+FROM nvcr.io/nvidia/${NGC_IMAGE}
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Seoul
+ENV WORKSPACE=/workspace
+
+# 빌드 캐시 무효화 -> 이 밑으로 모든 코드 새로 실행
+ARG CACHE_BUST=$(date +%s)
+
+ARG USER_UID=1001
+ARG USER_GID=1001
+ARG USERNAME=user
+
+RUN apt-get update && apt-get install -y \
+    bash-completion gdb iputils-ping openssh-client sudo \
+    python3 python3-pip python3-dev python3-venv \
+    git git-lfs curl net-tools ffmpeg gedit nano tmux ca-certificates \
+    locales software-properties-common htop \
+    python-is-python3 \
+    build-essential ninja-build cmake pkg-config \
+    libstdc++-14-dev x11-apps \
+    libgtest-dev libgmock-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Setup user configuration
+RUN groupadd --gid $USER_GID $USERNAME \
+    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
+    && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
+    && echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USERNAME/.bashrc \
+    && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/$USERNAME/.bashrc
+
+RUN ln -sf /usr/bin/python3 /usr/bin/python
+RUN python -m pip install --upgrade pip wheel
+
+# thirdparty/lerobot 소스를 컨테이너에 복사 후 설치
+# (빌드 컨텍스트: m.ax/ 프로젝트 루트)
+RUN mkdir -p ${WORKSPACE}/m.ax
+COPY thirdparty/lerobot ${WORKSPACE}/m.ax/thirdparty/lerobot
+
+# lerobot requirements.txt 설치
+RUN cd ${WORKSPACE}/lerobot && \
+    pip install -e . && \
+    pip install -e ".[smolvla, pi]"
+
+RUN pip install --no-cache-dir \
+    ffmpeg torchcodec pyzmq msgpack msgpack-numpy streamlit
+
+USER $USERNAME
+
+# ---- 쉘 환경 설정 (bashrc 등록)
+RUN echo "" >> ~/.bashrc && \
+    echo "export PS1='\[\e[1;31m\][M.AX]\[\e[0m\] \[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '" >> ~/.bashrc && \
+    echo "export LS_COLORS='di=1;97;42:ow=1;97;42:tw=1;97;42'" >> ~/.bashrc && \
+    echo "" >> ~/.bashrc && \
+    echo "alias eb='nano ~/.bashrc'" >> ~/.bashrc && \
+    echo "alias sb='source ~/.bashrc'" >> ~/.bashrc && \
+    echo "alias cw='cd /workspace'" >> ~/.bashrc && \
+    echo "" >> ~/.bashrc && \
+    echo "alias pv='pip index versions'" >> ~/.bashrc && \
+    echo "alias pi='pip install'" >> ~/.bashrc && \
+    echo "" >> ~/.bashrc && \
+    echo "alias pl='ps -ef | grep python'" >> ~/.bashrc && \
+    echo "alias kl='kill -9'" >> ~/.bashrc && \
+    echo "" >> ~/.bashrc
+
+RUN rm -rf ~/.cursor-server
+
+# 환경변수 기본값 (compose에서 override 가능)
+ENV PYTHONUNBUFFERED=1 \
+    TOKENIZERS_PARALLELISM=false \
+    HF_HOME=/root/.cache/huggingface \
+    CUDA_HOME=/usr/local/cuda
+
+WORKDIR /workspace
+CMD ["/bin/bash"]

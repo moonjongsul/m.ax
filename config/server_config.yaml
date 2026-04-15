@@ -1,0 +1,4 @@
+project:
+  gt_kitting: 
+    description: '국제공동과제 조지아텍 제조 물품 키팅'
+    config: 'proj_gt_kitting.yaml'
