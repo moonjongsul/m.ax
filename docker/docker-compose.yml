@@ -23,7 +23,7 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video,display
       - DISPLAY=${DISPLAY}
       - QT_X11_NO_MITSHM=1
-      - HF_HOME=/root/.cache/huggingface
+      - HF_HOME=${HOME}/.cache/huggingface
       - PYTHONUNBUFFERED=1
       - TOKENIZERS_PARALLELISM=false
       - MASTER_ADDR=127.0.0.1
@@ -36,7 +36,7 @@ services:
       - ${HOME}/datasets:/workspace/datasets:rw
       - /media:/media:rw
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - ${HOME}/.cache/huggingface:/root/.cache/huggingface:rw
+      - ${HOME}/.cache/huggingface:${HOME}/.cache/huggingface:rw
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
       - /dev/shm:/dev/shm
