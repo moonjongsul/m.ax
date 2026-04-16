@@ -14,12 +14,8 @@ ARG USER_UID=1001
 ARG USER_GID=1001
 ARG USERNAME=user
 
-# 빌드 캐시 무효화 -> 이 밑으로 모든 코드 새로 실행
-# docker build --build-arg CACHE_BUST=$(date +%s) ...
-# ARG CACHE_BUST
-
 # ---- 기본 패키지 ----
-RUN apt-get update && apt-get install -y \
+RUN apt update && apt install -y \
     bash-completion gdb iputils-ping openssh-client sudo \
     python3 python3-pip python3-dev python3-venv \
     git git-lfs curl net-tools ffmpeg gedit nano tmux ca-certificates \
@@ -28,8 +24,11 @@ RUN apt-get update && apt-get install -y \
     build-essential ninja-build cmake pkg-config \
     libstdc++-14-dev x11-apps \
     libgtest-dev libgmock-dev \
-    && apt-get clean \
+    && apt clean \
     && rm -rf /var/lib/apt/lists/*
+
+# 빌드 캐시 무효화 -> 이 밑으로 모든 코드 새로 실행
+# ARG CACHE_BUST
 
 # ---- ROS2 ${ROS_DISTRO} ----
 RUN locale-gen en_US en_US.UTF-8 && \
@@ -43,7 +42,6 @@ RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
 
 RUN apt-get update && apt-get install -y \
     ros-${ROS_DISTRO}-desktop \
-    ros-dev-tools \
     python3-colcon-common-extensions \
     python3-rosdep \
     python3-argcomplete \
@@ -51,9 +49,12 @@ RUN apt-get update && apt-get install -y \
     && (rosdep init || true) \
     && rosdep update \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "/opt/hpcx/ucc/lib" > /etc/ld.so.conf.d/00-hpcx.conf \
+    && echo "/opt/hpcx/ucx/lib" >> /etc/ld.so.conf.d/00-hpcx.conf \
+    && ldconfig
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt update && apt install -y --no-install-recommends \
     ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
     ros-${ROS_DISTRO}-rmw-fastrtps-cpp \
     ros-${ROS_DISTRO}-sdformat-urdf \
@@ -84,10 +85,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-joy \
     ros-${ROS_DISTRO}-teleop-twist-joy \
     ros-${ROS_DISTRO}-diff-drive-controller \
-    && apt-get clean \
+    && apt clean \
     && rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt update && apt install -y --no-install-recommends \
     libgflags-dev nlohmann-json3-dev \
     ros-${ROS_DISTRO}-image-transport \
     ros-${ROS_DISTRO}-image-transport-plugins \
@@ -101,10 +102,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-image-view \
     ros-${ROS_DISTRO}-tf-transformations \
     ros-${ROS_DISTRO}-find-object-2d \
-    ros-${ROS_DISTRO}-pcl-ros \
-    libdw-dev libssl-dev mesa-utils libgl1 libgoogle-glog-dev \
-    && apt-get clean \
+    libdw-dev libssl-dev mesa-utils libgoogle-glog-dev \
+    && apt clean \
     && rm -rf /var/lib/apt/lists/*
+
+# 빌드 캐시 무효화 -> 이 밑으로 모든 코드 새로 실행
+# ARG CACHE_BUST
 
 # ---- User 설정 ----
 RUN groupadd --gid $USER_GID $USERNAME \
@@ -114,19 +117,23 @@ RUN groupadd --gid $USER_GID $USERNAME \
 # ---- pip 업그레이드 (root) ----
 RUN python -m pip install --upgrade pip wheel --ignore-installed
 
+# ---- User 전환 ----
+USER $USERNAME
+
 # ---- lerobot (user 소유로 복사 및 설치) ----
 RUN mkdir -p ${WORKSPACE}/m.ax/thirdparty
 COPY --chown=$USERNAME:$USERNAME thirdparty/lerobot ${WORKSPACE}/m.ax/thirdparty/lerobot
+# COPY thirdparty/lerobot ${WORKSPACE}/m.ax/thirdparty/lerobot
 
 RUN cd ${WORKSPACE}/m.ax/thirdparty/lerobot && \
     pip install -e . && \
     pip install -e ".[smolvla, pi]"
 
 RUN pip install --no-cache-dir \
-    ffmpeg torchcodec omegaconf wandb pyzmq msgpack msgpack-numpy streamlit
+    torchcodec omegaconf wandb pyzmq msgpack msgpack-numpy streamlit
 
-# ---- User 전환 ----
-USER $USERNAME
+RUN python -c "import torch; print(torch.__version__, torch.cuda.is_available())" && \
+    python -c "from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy; print('lerobot OK')"
 
 # ---- 쉘 환경 설정 ----
 RUN echo "" >> ~/.bashrc && \

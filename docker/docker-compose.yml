@@ -2,6 +2,8 @@ services:
   max:
     container_name: ${CONTAINER_NAME}
     image: ${IMAGE_NAME}
+    # container_name: max
+    # image: nvcr.io/nvidia/pytorch:25.12-py3
     stdin_open: true
     tty: true
     command: tail -f /dev/null
@@ -29,6 +31,7 @@ services:
       - MASTER_ADDR=127.0.0.1
       - CUDA_HOME=/usr/local/cuda
       - TORCH_NCCL_ASYNC_ERROR_HANDLING=1
+      - TZ=Asia/Seoul
 
     volumes:
       # - /mnt/synology/RobotData:/mnt/synology
@@ -36,8 +39,6 @@ services:
       - ${HOME}/datasets:/workspace/datasets:rw
       - /media:/media:rw
       - /tmp/.X11-unix:/tmp/.X11-unix:rw
-      - /etc/timezone:/etc/timezone:ro
-      - /etc/localtime:/etc/localtime:ro
       - /dev/shm:/dev/shm
       - ${HOME}/.cache/huggingface:${HOME}/.cache/huggingface:rw
       - ${HOME}/.ssh:${HOME}/.ssh:rw
