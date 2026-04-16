@@ -1,71 +1,119 @@
+model:
+  type: 'vla'
+  policy: 'pi0.5'
+  checkpoint: ''
+  prompt: ''
+
 env:
   robot:
     type: 'fr3'
     ip: '172.16.0.2'
     comm: 'ros2'
     topic:
+      ros_domain_id: 0
       subscribe: 
-        joint_states: 
-          name: '/joint_states'
-          type: 'sensor_msgs/JointState'
+        /joint_states:
+          type: sensor_msgs/JointState
           hz: 30
       publish: 
-        joint_states: 
-          name: '/gello/joint_command'
-          type: 'sensor_msgs/JointState'
+        /gello/joint_states:
+          type: sensor_msgs/JointState
           hz: 30
     pose:
-      home: [0, -1.57, 0, -1.57, 0, 0, 0] # joint space
+      home:  # joint space
+        - 0.8633871078491211
+        - 0.42438486218452454
+        - 0.18764179944992065
+        - -1.3867534399032593
+        - -0.05604249984025955
+        - 1.7663707733154297
+        - 1.8812178373336792
+      kit:  # joint space
+        - 0.8633871078491211
+        - 0.42438486218452454
+        - 0.18764179944992065
+        - -1.3867534399032593
+        - -0.05604249984025955
+        - 1.7663707733154297
+        - 1.8812178373336792
+      
   gripper:
     type: 'dxl_parallel_gripper'
     comm: 'ros2'
     topic:
+      ros_domain_id: 0
       subscribe: 
-        joint_states: 
-          name: '/gripper/joint_states'
+        /dxl_parallel_gripper/joint_states: 
           type: 'sensor_msgs/JointState'
           hz: 30
       publish: 
-        command: 
-          name: '/gripper/command'
-          type: 'std_msgs/float32'
+        /gripper/gripper_client/target_gripper_width_percent:
+          type: 'std_msgs/Float32'
           hz: 30
+    pose:
+      open:
+        - 1.0
+      close:
+        - 0.0
   camera:
     camera_1:
+      comm: 'ros2'
       type: 'realsense'
       model: 'd405'      
       name: 'wrist_front'
-      port: /dev/video0
+      topic:
+        ros_domain_id: 1
+        subscribe:
+          /wrist/front/color/image_raw/compressed:
+            type: 'sensor_msgs/msg/CompressedImage'
+            hz: 30
+      port: ''
       serial: ''
       size: [848, 480]
       rotate: 0
     camera_2:
+      comm: 'ros2'
       type: 'realsense'
       model: 'd405'
       name: 'wrist_rear'
+      topic:
+        ros_domain_id: 1
+        subscribe:
+          /wrist/rear/color/image_raw/compressed:
+            type: 'sensor_msgs/msg/CompressedImage'
+            hz: 30
       port: /dev/video1
       serial: ''
       size: [848, 480]
       rotate: 180
     camera_3:
+      comm: 'ros2'
       type: 'orbbec'
       model: 'gemini2'
       name: 'front_view'
-      port: /dev/video2
+      topic:
+        ros_domain_id: 1
+        subscribe:
+          /front_view/color/image_raw/compressed:
+            type: 'sensor_msgs/msg/CompressedImage'
+            hz: 30
+      port: ''
       serial: ''
       size: [1280, 720]
       rotate: 0
     camera_4:
+      comm: 'ros2'
       type: 'orbbec'
       model: 'gemini2'
       name: 'side_view'
-      port: /dev/video3
+      topic:
+        ros_domain_id: 1
+        subscribe:
+          /side_view/color/image_raw/compressed:
+            type: 'sensor_msgs/msg/CompressedImage'
+            hz: 30
+      port: ''
       serial: ''
       size: [1280, 720]
       rotate: 0
 
-model:
-  type: 'vla'
-  name: 'pi0.5'
-
-  

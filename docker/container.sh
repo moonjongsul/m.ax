@@ -7,7 +7,7 @@ SCRIPT_NAME="$(basename "$0")"
 COMMAND="${1:-help}"
 
 CONTAINER_NAME="max"
-IMAGE_NAME="moonjongsul/max:pytorch-25.12-jetpack"
+IMAGE_NAME="moonjongsul/max:pytorch-25.12-x86"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 
 show_help() {

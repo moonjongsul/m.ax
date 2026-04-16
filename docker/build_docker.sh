@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # 1. 이미지 이름 및 태그 설정
-SYS_TARGET="jetpack" # 시스템 타겟 설정 (ex: 'jetpack', 'x86', 'dgx')
+SYS_TARGET="x86" # 시스템 타겟 설정 (ex: 'jetpack', 'x86', 'dgx')
 BUILD_IMAGE_NAME="moonjongsul/max"
 NGC_VERSION="25.12" # NGC PyTorch 버전 (ex: '25.12', '22.03' 등)
 DOCKERFILE="Dockerfile.${SYS_TARGET}"

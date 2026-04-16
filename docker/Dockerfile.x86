@@ -2,18 +2,20 @@ ARG NGC_IMAGE=pytorch:25.12-py3
 
 FROM nvcr.io/nvidia/${NGC_IMAGE}
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV TZ=Asia/Seoul
-ENV WORKSPACE=/workspace
-
-# 빌드 캐시 무효화 -> 이 밑으로 모든 코드 새로 실행
-ARG CACHE_BUST=$(date +%s)
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    ROS_DISTRO=jazzy \
+    RCUTILS_COLORIZED_OUTPUT=1 \
+    WORKSPACE=/workspace \
+    PIP_BREAK_SYSTEM_PACKAGES=1
 
 ARG USER_UID=1001
 ARG USER_GID=1001
 ARG USERNAME=user
 
-RUN apt-get update && apt-get install -y \
+# ---- 기본 패키지 ----
+RUN apt update && apt install -y \
     bash-completion gdb iputils-ping openssh-client sudo \
     python3 python3-pip python3-dev python3-venv \
     git git-lfs curl net-tools ffmpeg gedit nano tmux ca-certificates \
@@ -22,42 +24,132 @@ RUN apt-get update && apt-get install -y \
     build-essential ninja-build cmake pkg-config \
     libstdc++-14-dev x11-apps \
     libgtest-dev libgmock-dev \
-    && apt-get clean \
+    && apt clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Setup user configuration
-RUN groupadd --gid $USER_GID $USERNAME \
-    && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
-    && echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers \
-    && echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> /home/$USERNAME/.bashrc \
-    && echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> /home/$USERNAME/.bashrc
+# 빌드 캐시 무효화 -> 이 밑으로 모든 코드 새로 실행
+# ARG CACHE_BUST
 
-RUN ln -sf /usr/bin/python3 /usr/bin/python
-RUN python -m pip install --upgrade pip wheel
+# ---- ROS2 ${ROS_DISTRO} ----
+RUN locale-gen en_US en_US.UTF-8 && \
+    update-locale LC_ALL=en_US.UTF-8 LANG=en_US.UTF-8
 
-# thirdparty/lerobot 소스를 컨테이너에 복사 후 설치
-# (빌드 컨텍스트: m.ax/ 프로젝트 루트)
-RUN mkdir -p ${WORKSPACE}/m.ax
-COPY thirdparty/lerobot ${WORKSPACE}/m.ax/thirdparty/lerobot
+RUN curl -sSL https://raw.githubusercontent.com/ros/rosdistro/master/ros.key \
+        -o /usr/share/keyrings/ros-archive-keyring.gpg && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/ros-archive-keyring.gpg] \
+        http://packages.ros.org/ros2/ubuntu noble main" \
+        > /etc/apt/sources.list.d/ros2.list
 
-# lerobot requirements.txt 설치
-RUN cd ${WORKSPACE}/lerobot && \
+RUN apt-get update && apt-get install -y \
+    ros-${ROS_DISTRO}-desktop \
+    python3-colcon-common-extensions \
+    python3-rosdep \
+    python3-argcomplete \
+    libgl1-mesa-dri libgl1 libglu1-mesa-dev \
+    && (rosdep init || true) \
+    && rosdep update \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "/opt/hpcx/ucc/lib" > /etc/ld.so.conf.d/00-hpcx.conf \
+    && echo "/opt/hpcx/ucx/lib" >> /etc/ld.so.conf.d/00-hpcx.conf \
+    && ldconfig
+
+RUN apt update && apt install -y --no-install-recommends \
+    ros-${ROS_DISTRO}-rmw-cyclonedds-cpp \
+    ros-${ROS_DISTRO}-rmw-fastrtps-cpp \
+    ros-${ROS_DISTRO}-sdformat-urdf \
+    ros-${ROS_DISTRO}-joint-state-publisher-gui \
+    ros-${ROS_DISTRO}-ros2controlcli \
+    ros-${ROS_DISTRO}-controller-interface \
+    ros-${ROS_DISTRO}-hardware-interface \
+    ros-${ROS_DISTRO}-ament-cmake-clang-format \
+    ros-${ROS_DISTRO}-ament-cmake-clang-tidy \
+    ros-${ROS_DISTRO}-controller-manager \
+    ros-${ROS_DISTRO}-ros2-control \
+    ros-${ROS_DISTRO}-ros2-controllers \
+    ros-${ROS_DISTRO}-control-msgs \
+    ros-${ROS_DISTRO}-backward-ros \
+    ros-${ROS_DISTRO}-generate-parameter-library \
+    ros-${ROS_DISTRO}-realtime-tools \
+    ros-${ROS_DISTRO}-joint-state-publisher \
+    ros-${ROS_DISTRO}-joint-state-broadcaster \
+    ros-${ROS_DISTRO}-moveit-ros-move-group \
+    ros-${ROS_DISTRO}-moveit-kinematics \
+    ros-${ROS_DISTRO}-moveit-planners-ompl \
+    ros-${ROS_DISTRO}-moveit-ros-visualization \
+    ros-${ROS_DISTRO}-joint-trajectory-controller \
+    ros-${ROS_DISTRO}-moveit-simple-controller-manager \
+    ros-${ROS_DISTRO}-rviz2 \
+    ros-${ROS_DISTRO}-xacro \
+    ros-${ROS_DISTRO}-teleop-twist-keyboard \
+    ros-${ROS_DISTRO}-joy \
+    ros-${ROS_DISTRO}-teleop-twist-joy \
+    ros-${ROS_DISTRO}-diff-drive-controller \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN apt update && apt install -y --no-install-recommends \
+    libgflags-dev nlohmann-json3-dev \
+    ros-${ROS_DISTRO}-image-transport \
+    ros-${ROS_DISTRO}-image-transport-plugins \
+    ros-${ROS_DISTRO}-compressed-image-transport \
+    ros-${ROS_DISTRO}-image-publisher \
+    ros-${ROS_DISTRO}-camera-info-manager \
+    ros-${ROS_DISTRO}-diagnostic-updater \
+    ros-${ROS_DISTRO}-diagnostic-msgs \
+    ros-${ROS_DISTRO}-statistics-msgs \
+    ros-${ROS_DISTRO}-backward-ros \
+    ros-${ROS_DISTRO}-image-view \
+    ros-${ROS_DISTRO}-tf-transformations \
+    ros-${ROS_DISTRO}-find-object-2d \
+    libdw-dev libssl-dev mesa-utils libgoogle-glog-dev \
+    && apt clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# 빌드 캐시 무효화 -> 이 밑으로 모든 코드 새로 실행
+# ARG CACHE_BUST
+
+# ---- User 설정 (NGC PyTorch base: ubuntu 유저 rename) ----
+RUN usermod -l ${USERNAME} ubuntu \
+    && groupmod -n ${USERNAME} ubuntu \
+    && usermod -d /home/${USERNAME} -m ${USERNAME} \
+    && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# ---- pip 업그레이드 (root) ----
+RUN python -m pip install --upgrade pip wheel --ignore-installed
+
+# ---- User 전환 ----
+USER ${USERNAME}
+
+# ---- lerobot (user 소유로 복사 및 설치) ----
+RUN mkdir -p ${WORKSPACE}/m.ax/thirdparty
+COPY --chown=${USERNAME}:${USERNAME} thirdparty/lerobot ${WORKSPACE}/m.ax/thirdparty/lerobot
+# COPY thirdparty/lerobot ${WORKSPACE}/m.ax/thirdparty/lerobot
+
+RUN cd ${WORKSPACE}/m.ax/thirdparty/lerobot && \
     pip install -e . && \
     pip install -e ".[smolvla, pi]"
 
 RUN pip install --no-cache-dir \
-    ffmpeg torchcodec pyzmq msgpack msgpack-numpy streamlit
+    torchcodec omegaconf wandb plotly pyzmq msgpack msgpack-numpy streamlit
 
-USER $USERNAME
+RUN python -c "import torch; print(torch.__version__, torch.cuda.is_available())" && \
+    python -c "from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy; print('lerobot OK')"
 
-# ---- 쉘 환경 설정 (bashrc 등록)
+# ---- 쉘 환경 설정 ----
 RUN echo "" >> ~/.bashrc && \
+    echo "export ROS_DOMAIN_ID=0" >> ~/.bashrc && \
+    echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> ~/.bashrc && \
+    echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc && \
+    echo "source /usr/share/colcon_argcomplete/hook/colcon-argcomplete.bash" >> ~/.bashrc && \
+    echo "" >> ~/.bashrc && \
     echo "export PS1='\[\e[1;31m\][M.AX]\[\e[0m\] \[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '" >> ~/.bashrc && \
     echo "export LS_COLORS='di=1;97;42:ow=1;97;42:tw=1;97;42'" >> ~/.bashrc && \
+    echo "export PATH='$HOME/.local/bin:$PATH'" >> ~/.bashrc && \
     echo "" >> ~/.bashrc && \
     echo "alias eb='nano ~/.bashrc'" >> ~/.bashrc && \
     echo "alias sb='source ~/.bashrc'" >> ~/.bashrc && \
-    echo "alias cw='cd /workspace'" >> ~/.bashrc && \
+    echo "alias cw='cd ~/workspace'" >> ~/.bashrc && \
     echo "" >> ~/.bashrc && \
     echo "alias pv='pip index versions'" >> ~/.bashrc && \
     echo "alias pi='pip install'" >> ~/.bashrc && \
@@ -68,11 +160,9 @@ RUN echo "" >> ~/.bashrc && \
 
 RUN rm -rf ~/.cursor-server
 
-# 환경변수 기본값 (compose에서 override 가능)
 ENV PYTHONUNBUFFERED=1 \
     TOKENIZERS_PARALLELISM=false \
-    HF_HOME=/root/.cache/huggingface \
     CUDA_HOME=/usr/local/cuda
 
-WORKDIR /workspace
+WORKDIR ${WORKSPACE}
 CMD ["/bin/bash"]

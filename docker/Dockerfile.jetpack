@@ -109,7 +109,7 @@ RUN apt update && apt install -y --no-install-recommends \
 # 빌드 캐시 무효화 -> 이 밑으로 모든 코드 새로 실행
 # ARG CACHE_BUST
 
-# ---- User 설정 ----
+# ---- User 설정 (Jetson base: 신규 생성) ----
 RUN groupadd --gid ${USER_GID} ${USERNAME} \
     && useradd --uid ${USER_UID} --gid ${USER_GID} -m ${USERNAME} \
     && echo "${USERNAME} ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
@@ -130,7 +130,7 @@ RUN cd ${WORKSPACE}/m.ax/thirdparty/lerobot && \
     pip install -e ".[smolvla, pi]"
 
 RUN pip install --no-cache-dir \
-    torchcodec omegaconf wandb pyzmq msgpack msgpack-numpy streamlit
+    torchcodec omegaconf wandb plotly pyzmq msgpack msgpack-numpy streamlit
 
 RUN python -c "import torch; print(torch.__version__, torch.cuda.is_available())" && \
     python -c "from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy; print('lerobot OK')"
@@ -144,6 +144,7 @@ RUN echo "" >> ~/.bashrc && \
     echo "" >> ~/.bashrc && \
     echo "export PS1='\[\e[1;31m\][M.AX]\[\e[0m\] \[\e[1;32m\]\u@\h\[\e[0m\]:\[\e[1;34m\]\w\[\e[0m\]\$ '" >> ~/.bashrc && \
     echo "export LS_COLORS='di=1;97;42:ow=1;97;42:tw=1;97;42'" >> ~/.bashrc && \
+    echo "export PATH='$HOME/.local/bin:$PATH'" >> ~/.bashrc && \
     echo "" >> ~/.bashrc && \
     echo "alias eb='nano ~/.bashrc'" >> ~/.bashrc && \
     echo "alias sb='source ~/.bashrc'" >> ~/.bashrc && \

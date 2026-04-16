@@ -2,7 +2,7 @@ from pathlib import Path
 from omegaconf import OmegaConf, DictConfig
 
 
-CONFIG_DIR = Path(__file__).parent / "config"
+CONFIG_DIR = Path(__file__).parent.parent.parent / "config"
 
 
 def load_config(fname: Path, project: str) -> DictConfig:
