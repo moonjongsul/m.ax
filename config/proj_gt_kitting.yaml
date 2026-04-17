@@ -1,8 +1,11 @@
 model:
   type: 'vla'
-  policy: 'pi0.5'
-  checkpoint: ''
-  prompt: ''
+  policy_list: ['pi0.5', 'smolvla']
+  policy: 'pi0.5'          # pi0.5 | smolvla
+  checkpoint: '/workspace/m.ax/checkpoints/a6000_260416/pi05_kitting_scratch_a6000_b16_260413/checkpoints/034000/pretrained_model'
+  task_prompt: 'pick part and flip part'
+  device: 'cuda'            # cuda | cpu
+  dtype: 'bfloat16'         # float32 | bfloat16
 
 env:
   robot:
@@ -15,28 +18,42 @@ env:
         /joint_states:
           type: sensor_msgs/JointState
           hz: 30
+        /franka_robot_state_broadcaster/current_pose:
+          type: geometry_msgs/msg/PoseStamped
+          hz: 30
+        /franka_robot_state_broadcaster/external_joint_torques:
+          type: sensor_msgs/msg/JointState
+          hz: 30
       publish: 
         /gello/joint_states:
           type: sensor_msgs/JointState
           hz: 30
+    joint_list:
+      - fr3_joint1
+      - fr3_joint2
+      - fr3_joint3
+      - fr3_joint4
+      - fr3_joint5
+      - fr3_joint6
+      - fr3_joint7
     pose:
       home:  # joint space
-        - 0.8633871078491211
-        - 0.42438486218452454
-        - 0.18764179944992065
-        - -1.3867534399032593
-        - -0.05604249984025955
-        - 1.7663707733154297
-        - 1.8812178373336792
+        - 0.878352701663971
+        - 0.3663146495819092
+        - 0.20556820929050446
+        - -1.6565794944763184
+        - -0.06079482287168503
+        - 2.0056283473968506
+        - 1.8882989883422852
       kit:  # joint space
-        - 0.8633871078491211
-        - 0.42438486218452454
-        - 0.18764179944992065
-        - -1.3867534399032593
-        - -0.05604249984025955
-        - 1.7663707733154297
-        - 1.8812178373336792
-      
+        - -0.22613531351089478
+        - -0.052150316536426544
+        - 0.3750353157520294
+        - -1.90276300907135
+        - 0.03822034224867821
+        - 1.83684504032135
+        - 2.5277857780456543
+
   gripper:
     type: 'dxl_parallel_gripper'
     comm: 'ros2'
@@ -50,6 +67,8 @@ env:
         /gripper/gripper_client/target_gripper_width_percent:
           type: 'std_msgs/Float32'
           hz: 30
+    joint_list:
+      - finger_joint
     pose:
       open:
         - 1.0

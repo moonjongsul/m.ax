@@ -1,6 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.context import Context
+from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState, CompressedImage
 from std_msgs.msg import Header, Float32
 
@@ -18,6 +19,8 @@ MSG_TYPE_MAP = {
     'std_msgs/msg/Float32':             Float32,
     'sensor_msgs/CompressedImage':      CompressedImage,
     'sensor_msgs/msg/CompressedImage':  CompressedImage,
+    'geometry_msgs/PoseStamped':        PoseStamped,
+    'geometry_msgs/msg/PoseStamped':    PoseStamped,
 }
 
 def resolve_msg_type(type_str: str):
