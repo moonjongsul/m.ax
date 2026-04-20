@@ -9,7 +9,7 @@ from common.utils.ui_utils import (
     render_gripper,      update_gripper,
     render_pose_control,
     render_status,       update_status,
-    get_model_state,
+    get_model_state,     wait_for_model_state,
     send_model_start,    send_model_stop,
     send_model_reload,
 )
@@ -103,6 +103,9 @@ def _render_model_panel(cfg):
 def show(cfg):
     st.header("Inference")
     _init_session(cfg)
+
+    # ModelServer heartbeat 수신 대기 (첫 페이지 로드 시 버튼 상태 정확히 반영)
+    wait_for_model_state()
 
     # ── 카메라 + 로봇/그리퍼 상태 ────────────────────────────────────────
     ph_cameras = render_cameras(cfg)

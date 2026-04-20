@@ -1,0 +1,19 @@
+from_domain: 0
+to_domain: 1
+topics:
+  /franka_robot_state_broadcaster/current_pose:
+    type: geometry_msgs/msg/PoseStamped
+  /franka_robot_state_broadcaster/desired_joint_states:
+    type: sensor_msgs/msg/JointState
+  /franka_robot_state_broadcaster/external_joint_torques:
+    type: sensor_msgs/msg/JointState
+  /franka_robot_state_broadcaster/measured_joint_states:
+    type: sensor_msgs/msg/JointState
+  /joint_states:
+    type: sensor_msgs/msg/JointState
+  /dxl_parallel_gripper/joint_states:
+    type: sensor_msgs/msg/JointState
+  /gello/joint_states:
+    type: sensor_msgs/msg/JointState
+  /gripper/gripper_client/target_gripper_width_percent:
+    type: std_msgs/msg/Float32

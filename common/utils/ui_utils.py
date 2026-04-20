@@ -185,6 +185,7 @@ def _listeners_started() -> dict:
                     else:
                         ms["state"] = decoded
                         ms["detail"] = ""
+                    ms["_received"] = True
             except zmq.Again:
                 pass
             except Exception:
@@ -549,12 +550,7 @@ def update_gripper(placeholders: dict, cfg):
 # ─── Pose 버튼 제어 ───────────────────────────────────────────────────────────
 
 def render_pose_control(cfg, disabled: bool = False):
-    """robot + gripper pose 버튼 렌더링.
-
-    Args:
-        cfg: 설정 객체
-        disabled: True이면 모든 버튼 비활성화 (추론 중)
-    """
+    """robot + gripper pose 버튼 렌더링."""
     robot   = (cfg.env or {}).get("robot")
     gripper = (cfg.env or {}).get("gripper")
 
@@ -682,6 +678,23 @@ def update_status(placeholders: dict):
         ph.info(f"{icon} {label}")
     else:
         ph.info(f"{icon} {label}")
+
+
+def wait_for_model_state(timeout: float = 1.5):
+    """ModelServer의 첫 heartbeat을 받을 때까지 대기 (최초 페이지 로드용).
+
+    heartbeat 주기는 1초이므로 timeout 1.5초면 첫 상태를 받기에 충분.
+    """
+    import time as _t
+    _start_listeners()  # 리스너가 아직 시작 안 됐으면 시작
+    ms = _model_state()
+    deadline = _t.monotonic() + timeout
+    while _t.monotonic() < deadline:
+        with ms["lock"]:
+            # heartbeat을 한 번이라도 받으면 _received 플래그가 생김
+            if ms.get("_received"):
+                return
+        _t.sleep(0.05)
 
 
 def get_model_state() -> str:

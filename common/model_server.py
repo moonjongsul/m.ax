@@ -72,6 +72,7 @@ class ModelServer:
         self._model_cfg = cfg.model
 
         self._state: ModelState = "idle"
+        self._state_detail: str = ""
         self._state_lock = threading.Lock()
 
         self._policy = None
@@ -99,10 +100,25 @@ class ModelServer:
     def _set_state(self, state: ModelState, detail: str = ""):
         with self._state_lock:
             self._state = state
+            self._state_detail = detail
+        self._publish_state()
+        logger.info(f"[ModelServer] state → {state}" +
+                    (f" ({detail})" if detail else ""))
+
+    def _publish_state(self):
+        """현재 상태를 PUB으로 발행."""
+        with self._state_lock:
+            state = self._state
+            detail = self._state_detail
         msg = f"error:{detail}" if state == "error" and detail else state
         if self._state_pub:
             self._state_pub.send_multipart([b"model_state", msg.encode()])
-        logger.info(f"[ModelServer] state → {msg}")
+
+    def _state_heartbeat_loop(self):
+        """1초마다 현재 상태를 반복 발행 (slow joiner 대비)."""
+        while self._running:
+            self._publish_state()
+            time.sleep(1.0)
 
     @property
     def state(self) -> ModelState:
@@ -164,14 +180,12 @@ class ModelServer:
             from lerobot.policies.factory import make_pre_post_processors
 
             policy_name = str(self._model_cfg.get("policy") or "pi0.5")
-            device      = str(self._model_cfg.get("device") or "cuda")
-            dtype_str   = str(self._model_cfg.get("dtype") or "bfloat16")
-            dtype       = torch.bfloat16 if dtype_str == "bfloat16" else torch.float32
+            device = str(self._model_cfg.get("device") or "cuda")
 
             logger.info(f"[ModelServer] Loading {policy_name} from {checkpoint} ...")
             PolicyClass = _load_policy_class(policy_name)
             policy = PolicyClass.from_pretrained(checkpoint)
-            policy.to(device=device, dtype=dtype)
+            policy.to(device)       # dtype은 모델 내부 설정을 따름 (참조 구현 동일)
             policy.eval()
 
             preprocessor, postprocessor = make_pre_post_processors(
@@ -423,6 +437,9 @@ class ModelServer:
 
         # 명령 수신 스레드
         threading.Thread(target=self._command_loop, daemon=True, name="model-cmd").start()
+
+        # 상태 heartbeat (1초마다 현재 상태 반복 발행)
+        threading.Thread(target=self._state_heartbeat_loop, daemon=True, name="state-hb").start()
 
         logger.info(f"[ModelServer] started. STATE PUB:{ZMQ_STATE_PUB_PORT}, "
                     f"CMD PULL:{ZMQ_CMD_PULL_PORT}")

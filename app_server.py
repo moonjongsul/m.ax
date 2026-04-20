@@ -34,8 +34,8 @@ def main():
     comm.pipeline()
 
     # ── 2. ModelServer 기동 ────────────────────────────────────────────────
-    model = ModelServer(cfg)
-    model.start()
+    # model = ModelServer(cfg)
+    # model.start()
 
     # ── 3. Streamlit 웹 UI (subprocess) ────────────────────────────────────
     def _start_web():
