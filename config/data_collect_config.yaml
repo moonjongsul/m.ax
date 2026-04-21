@@ -1,0 +1,64 @@
+
+data_collect:
+  type: 'lerobot'
+  repo_id: 'manufacturing_kitting_dataset'
+  hz: 30
+  warmup_sec: 1.0
+  img_shape: '640x480'
+  output_dir: '/workspace/m.ax/datasets'
+  task_prompt: 
+    flip_object:
+      - "flip object"
+      - "flip the object"
+      - "flip part"
+      - "flip the part"
+      - "flip the component"
+      - "flip the part over"
+      - "turn object upside down"
+      - "turn the part upside down"
+      - "turn the part over"
+      - "invert the part"
+      - "flip object over"
+    pick_object:
+      # 핵심 의미: grasp + small lift (잡고 살짝 들어올리기)
+      - "pick object"
+      - "pick up object"
+      - "pick the object"
+      - "pick up the object"
+      - "pick part"
+      - "pick up the part"
+      - "grasp the part"
+      - "grasp and lift the part"
+      - "grip the part"
+      - "grab the part"
+      - "pick up and hold the part"
+      - "lift the part"
+      - "lift up the part"
+    kit_object:
+      # 핵심 의미: 정확한 각도로 트레이에 안착 (precision placement)
+      - "kit the part"
+      - "kit the part in the tray"
+      - "kit the part into the tray"
+      - "place the part in the tray"
+      - "place the part into the kit"
+      - "fit the part in the tray"
+      - "fit the part into the kit slot"
+      - "seat the part in the tray"
+      - "align and place the part in the tray"
+      - "insert the part into the kit"
+      - "set the part in the tray"
+      - "position the part in the tray"
+      - "nest the part in the tray"
+    move_object:
+      - "move the part"           # 가장 안전 (목적지 언급 없음)
+      - "move the object"
+      - "move the component"
+      - "move to the target"
+      - "move to the target location"
+      - "go to the target"
+      - "go to the target position"
+      - "go to the destination"
+      - "reach the target"
+      - "reach the target position"
+      - "approach the target"
+      - "navigate to the target"

@@ -2,20 +2,12 @@ model:
   type: 'vla'
   policy_list: ['pi0.5', 'smolvla']
   policy: 'smolvla'          # pi0.5 | smolvla
+  expression_type: 'rot6d'    # joint | quat | rot6d
   #checkpoint: '/workspace/m.ax/checkpoints/a6000_260416/pi05_kitting_scratch_a6000_b16_260413/checkpoints/034000/pretrained_model'
   checkpoint: '/workspace/m.ax/checkpoints/local_260410/smolvla_kitting_scratch_b32/checkpoints/082000/pretrained_model'
   task_prompt: 'pick part and flip part'
   device: 'cuda'            # cuda | cpu
   dtype: 'bfloat16'         # float32 | bfloat16
-
-data_collect:
-  type: 'lerobot'
-  task_prompt: 'flip object'
-  hz: 30
-  warmup_sec: 1.0
-  img_shape: '640x480'
-  output_dir: '/workspace/m.ax/datasets'
-  repo_id: 'kitting_dataset'
 
 env:
   robot:

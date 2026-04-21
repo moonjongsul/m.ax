@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import argparse
 import os
+import queue
+import random
 import sys
 import threading
 import time
@@ -60,7 +62,7 @@ class ScalarTopicSpec:
 @dataclass
 class CollectConfig:
     hz: int
-    task_prompt: str
+    task_pools: dict[str, list[str]]   # task_id → paraphrase pool (순서 보존)
     warmup_sec: float
     img_shape: tuple[int, int]  # (W, H) 저장·시각화용
     output_dir: Path
@@ -71,6 +73,10 @@ class CollectConfig:
     robot_state: ScalarTopicSpec       # /joint_states
     gripper_state: ScalarTopicSpec     # /dxl_parallel_gripper/joint_states
     cameras: list[CameraSpec] = field(default_factory=list)
+
+    @property
+    def task_ids(self) -> list[str]:
+        return list(self.task_pools.keys())
 
 
 def _parse_img_shape(s: str) -> tuple[int, int]:
@@ -115,9 +121,20 @@ def load_config(path: Path) -> CollectConfig:
             rotate=int(cam.get("rotate", 0)),
         ))
 
+    raw_task_prompt = dc.get("task_prompt")
+    if not isinstance(raw_task_prompt, dict) or not raw_task_prompt:
+        raise ValueError("data_collect.task_prompt 는 {task_id: [paraphrase...]} dict 여야 합니다.")
+    task_pools: dict[str, list[str]] = {}
+    for task_id, raw_pool in raw_task_prompt.items():
+        tid = str(task_id)
+        pool = [str(p).strip() for p in (raw_pool or []) if str(p).strip()]
+        if not pool:
+            pool = [tid.replace("_", " ").replace("-", " ")]
+        task_pools[tid] = pool
+
     return CollectConfig(
         hz=int(dc["hz"]),
-        task_prompt=str(dc["task_prompt"]),
+        task_pools=task_pools,
         warmup_sec=float(dc["warmup_sec"]),
         img_shape=_parse_img_shape(dc["img_shape"]),
         output_dir=Path(dc["output_dir"]),
@@ -266,18 +283,26 @@ def render(
     frame_count: int,
     saved_episodes: int,
     current_episode: int,
+    active_task: str,
+    task_index: int,
+    task_total: int,
+    pending_saves: int = 0,
 ) -> np.ndarray:
     cam_order = [c.name for c in cfg.cameras]
     grid = _build_grid(cam_images, cam_order, cfg.img_shape)
 
-    # 그리드 상단 헤더: task prompt + 에피소드 카운터
+    # 그리드 상단 헤더: 활성 task + 에피소드 카운터
     gh, gw = grid.shape[:2]
     header_h = 80
     header = np.zeros((header_h, gw, 3), dtype=np.uint8)
-    _put_text(header, f"TASK: {cfg.task_prompt}", (16, 44), (0, 255, 255), 1.6)
+    _put_text(header, f"TASK: {active_task} [{task_index + 1}/{task_total}]",
+              (16, 44), (0, 255, 255), 1.6)
     ep_text = f"saved: {saved_episodes}   current: #{current_episode}"
+    if pending_saves > 0:
+        ep_text += f"   (saving {pending_saves})"
     (tw, _), _ = cv2.getTextSize(ep_text, cv2.FONT_HERSHEY_SIMPLEX, 1.1, 2)
-    _put_text(header, ep_text, (gw - tw - 16, 44), (255, 220, 120), 1.1)
+    color = (100, 180, 255) if pending_saves > 0 else (255, 220, 120)
+    _put_text(header, ep_text, (gw - tw - 16, 44), color, 1.1)
     grid = np.vstack([header, grid])
 
     banner_h = 220
@@ -340,15 +365,18 @@ def render(
     #   stale       → 빨강 블링크 (2Hz)
     #   REC 중      → 녹색 블링크 (2Hz)
     #   그 외 OK    → 녹색 상시
-    border_thickness = 12
+    base_thickness = 12
     if not all_ok:
         border_color = (0, 0, 255)
+        border_thickness = base_thickness
         draw = int(now * 4) % 2 == 0
     elif status == "REC":
-        border_color = (0, 220, 0)
+        border_color = (0, 140, 255)  # 주황
+        border_thickness = base_thickness * 4
         draw = int(now * 4) % 2 == 0
     else:
         border_color = (0, 220, 0)
+        border_thickness = base_thickness
         draw = True
     if draw:
         h, w = canvas.shape[:2]
@@ -384,28 +412,28 @@ def build_features(cam_names: list[str], img_wh: tuple[int, int]) -> dict:
     return features
 
 
-def _slugify(text: str) -> str:
-    """task prompt → 안전한 폴더명 (영숫자/하이픈/언더스코어만 유지)."""
-    out = []
-    for ch in text.strip().lower():
-        if ch.isalnum():
-            out.append(ch)
-        elif ch in (" ", "-", "_"):
-            out.append("_")
-    slug = "".join(out).strip("_")
-    while "__" in slug:
-        slug = slug.replace("__", "_")
-    return slug or "task"
-
-
 class EpisodeRecorder:
+    """LeRobotDataset 접근을 단일 워커 스레드로 직렬화.
+
+    메인 루프는 `add(...)`, `save()`, `discard()`, `finalize()` 호출 시
+    모두 커맨드만 큐에 넣고 즉시 return. 무거운 I/O(비디오 인코딩 등)는
+    워커 스레드에서 순차 처리됨.
+    """
+
+    _CMD_SAVE = "save"
+    _CMD_DISCARD = "discard"
+    _CMD_FINALIZE = "finalize"
+
     def __init__(self, cfg: CollectConfig) -> None:
         self.cfg = cfg
+        self._rng = random.Random()
+        # 활성 task (←/→로 전환). 초기값은 dict 첫 key.
+        self._active_task: str = next(iter(cfg.task_pools))
         cam_names = [c.name for c in cfg.cameras]
         features = build_features(cam_names, cfg.img_shape)
 
         cfg.output_dir.mkdir(parents=True, exist_ok=True)
-        dataset_root = cfg.output_dir / _slugify(cfg.task_prompt)
+        dataset_root = cfg.output_dir / cfg.repo_id
         self.dataset_root = dataset_root
 
         # 로컬 데이터셋 유효성 판정: meta/info.json 과 meta/tasks.parquet 이 모두 존재해야 완전한 상태.
@@ -436,29 +464,100 @@ class EpisodeRecorder:
                 image_writer_threads=4,
             )
 
+        # ── 워커 상태 ─────────────────────────────────────────────────
+        self._queue: queue.Queue = queue.Queue()
+        self._state_lock = threading.Lock()
+        # 완료 저장된 에피소드 수 (워커가 save 성공 시 증가)
+        self._num_saved = int(self.dataset.num_episodes)
+        # 워커가 현재 처리 중인 저장 작업 수 (UI 표시용)
+        self._pending_saves = 0
+        self._worker = threading.Thread(
+            target=self._run_worker, daemon=True, name="lerobot-recorder"
+        )
+        self._worker.start()
+
+    # ── 워커 루프 ────────────────────────────────────────────────────
+    def _run_worker(self) -> None:
+        while True:
+            item = self._queue.get()
+            if item is None:
+                return
+            kind = item[0]
+            try:
+                if kind == "frame":
+                    _, frame = item
+                    self.dataset.add_frame(frame)
+                elif kind == self._CMD_SAVE:
+                    self.dataset.save_episode()
+                    with self._state_lock:
+                        self._num_saved = int(self.dataset.num_episodes)
+                        self._pending_saves -= 1
+                elif kind == self._CMD_DISCARD:
+                    self.dataset.clear_episode_buffer(delete_images=True)
+                    with self._state_lock:
+                        self._pending_saves -= 1
+                elif kind == self._CMD_FINALIZE:
+                    done_evt: threading.Event = item[1]
+                    self.dataset.finalize()
+                    done_evt.set()
+                    return
+            except Exception as e:
+                print(f"[recorder/{kind}] 실패: {e}")
+                if kind in (self._CMD_SAVE, self._CMD_DISCARD):
+                    with self._state_lock:
+                        self._pending_saves -= 1
+            finally:
+                self._queue.task_done()
+
+    # ── 활성 task ───────────────────────────────────────────────────
+    @property
+    def active_task(self) -> str:
+        return self._active_task
+
+    def set_active_task(self, task_id: str) -> None:
+        if task_id not in self.cfg.task_pools:
+            raise ValueError(f"unknown task_id: {task_id}")
+        self._active_task = task_id
+
+    # ── 메인 스레드에서 호출 ─────────────────────────────────────────
     def add(self, state: np.ndarray, action: np.ndarray,
             images_bgr: dict[str, np.ndarray]) -> None:
+        pool = self.cfg.task_pools[self._active_task]
         frame: dict = {
             "action": action.astype(np.float32),
             "observation.state": state.astype(np.float32),
-            "task": self.cfg.task_prompt,
+            "task": self._rng.choice(pool),
         }
         for name, bgr in images_bgr.items():
             frame[f"observation.images.{name}"] = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
-        self.dataset.add_frame(frame)
+        self._queue.put(("frame", frame))
 
     def save(self) -> None:
-        self.dataset.save_episode()
+        with self._state_lock:
+            self._pending_saves += 1
+        self._queue.put((self._CMD_SAVE,))
 
     def discard(self) -> None:
-        self.dataset.clear_episode_buffer(delete_images=True)
+        with self._state_lock:
+            self._pending_saves += 1
+        self._queue.put((self._CMD_DISCARD,))
 
     def finalize(self) -> None:
-        self.dataset.finalize()
+        """모든 pending 작업 flush 후 finalize. 블로킹."""
+        done = threading.Event()
+        self._queue.put((self._CMD_FINALIZE, done))
+        done.wait()
+        self._worker.join(timeout=5.0)
 
     @property
     def num_saved(self) -> int:
-        return int(self.dataset.num_episodes)
+        with self._state_lock:
+            return self._num_saved
+
+    @property
+    def pending_saves(self) -> int:
+        with self._state_lock:
+            return self._pending_saves
 
 
 # ─── 메인 루프 ───────────────────────────────────────────────────────────────
@@ -530,19 +629,43 @@ class DataCollector:
         return np.concatenate([arm[:7], np.array([grip], dtype=np.float32)])
 
     # ── 키 입력 ──
+    # waitKeyEx 기준 화살표 키코드 (Linux/X11; 다른 플랫폼 호환을 위해 다중 등록)
+    _KEY_LEFT = {65361, 81, 2424832}   # X11, waitKey&0xFF 하위호환, Windows
+    _KEY_RIGHT = {65363, 83, 2555904}
+
+    def _shift_active_task(self, delta: int) -> None:
+        task_ids = self.cfg.task_ids
+        if not task_ids:
+            return
+        cur = self.recorder.active_task
+        idx = task_ids.index(cur) if cur in task_ids else 0
+        new_idx = (idx + delta) % len(task_ids)
+        new_task = task_ids[new_idx]
+        self.recorder.set_active_task(new_task)
+        print(f"[task] {cur} → {new_task}  ({new_idx + 1}/{len(task_ids)})")
+
     def _handle_key(self, key: int) -> bool:
         """True를 반환하면 루프 종료."""
-        if key == ord("s"):
+        ascii_key = key & 0xFF
+
+        if key in self._KEY_LEFT or key in self._KEY_RIGHT:
+            if self._recording:
+                print("[task] 녹화 중에는 task 전환 불가")
+            else:
+                self._shift_active_task(-1 if key in self._KEY_LEFT else +1)
+            return False
+
+        if ascii_key == ord("s"):
             if self._recording:
                 print("[key:s] 이미 녹화 중")
             else:
                 self._recording = True
                 self._rec_start_ts = time.time()
                 self._frame_count = 0
-                print("[key:s] 녹화 시작 (warmup)")
-        elif key == ord(" ") or key == 32:
+                print(f"[key:s] 녹화 시작 (warmup)  task={self.recorder.active_task}")
+        elif ascii_key == ord(" ") or ascii_key == 32:
             if self._recording and self._frame_count > 0:
-                print(f"[key:space] 에피소드 저장 ({self._frame_count} frames)")
+                print(f"[key:space] 저장 요청 전송 ({self._frame_count} frames, async)")
                 self.recorder.save()
             elif self._recording:
                 print("[key:space] 저장할 프레임 없음 → discard")
@@ -552,19 +675,20 @@ class DataCollector:
             self._recording = False
             self._rec_start_ts = None
             self._frame_count = 0
-        elif key == ord("r"):
+        elif ascii_key == ord("r"):
             if self._recording:
                 print("[key:r] 현재 에피소드 버림")
                 self.recorder.discard()
             self._recording = False
             self._rec_start_ts = None
             self._frame_count = 0
-        elif key == ord("q"):
+        elif ascii_key == ord("q"):
             if self._recording:
                 print("[key:q] 녹화 중 종료 → discard")
                 self.recorder.discard()
-            print("[key:q] finalize")
+            print("[key:q] finalize (pending 저장 완료 대기 중...)")
             self.recorder.finalize()
+            print("[key:q] finalize 완료")
             return True
         return False
 
@@ -573,7 +697,8 @@ class DataCollector:
         cfg = self.cfg
         period = 1.0 / cfg.hz
         cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_NORMAL)
-        print("[data_collect] ready — s: start, space: save, r: discard, q: quit")
+        print("[data_collect] ready — s: start, space: save, r: discard, q: quit,"
+              "  ←/→: prev/next task")
 
         while True:
             tick = time.time()
@@ -616,15 +741,23 @@ class DataCollector:
 
             # 시각화
             saved_eps = self.recorder.num_saved
+            pending = self.recorder.pending_saves
+            task_ids = cfg.task_ids
+            active = self.recorder.active_task
+            task_idx = task_ids.index(active) if active in task_ids else 0
             canvas = render(
                 cfg, cam_images, cam_ts, scalar_ts,
                 state, action, status, elapsed, self._frame_count,
                 saved_episodes=saved_eps,
-                current_episode=saved_eps,
+                current_episode=saved_eps + pending,
+                active_task=active,
+                task_index=task_idx,
+                task_total=len(task_ids),
+                pending_saves=pending,
             )
             cv2.imshow(_WINDOW_NAME, canvas)
-            key = cv2.waitKey(1) & 0xFF
-            if key != 255 and self._handle_key(key):
+            key = cv2.waitKeyEx(1)
+            if key != -1 and self._handle_key(key):
                 break
 
             # hz 유지
@@ -641,13 +774,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="ROS2 → LeRobot data collector")
     parser.add_argument(
         "--config", type=Path,
-        default=Path("/workspace/m.ax/config/proj_gt_kitting.yaml"),
+        default=Path("/workspace/m.ax/config/data_collect_config.yaml"),
     )
     args = parser.parse_args()
 
     cfg = load_config(args.config)
     print(f"[config] hz={cfg.hz} warmup={cfg.warmup_sec}s img={cfg.img_shape} "
-          f"prompt='{cfg.task_prompt}'")
+          f"repo_id={cfg.repo_id}")
+    print("[config] tasks:")
+    for tid, pool in cfg.task_pools.items():
+        print(f"  - {tid} ({len(pool)} prompts)")
     print(f"[config] cams: {[c.name for c in cfg.cameras]}")
 
     collector = DataCollector(cfg)

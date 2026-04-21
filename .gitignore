@@ -8,6 +8,10 @@ venv.bak/
 __pypackages__/
 node_modules/
 checkpoints/
+datasets/
+ros2/build/
+ros2/install/
+ros2/log/
 
 # Lock files
 poetry.lock
