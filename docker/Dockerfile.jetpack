@@ -133,7 +133,7 @@ RUN cd ${WORKSPACE}/m.ax/thirdparty/lerobot && \
     pip install -e ".[smolvla, pi]"
 
 RUN pip install --no-cache-dir \
-    torchcodec omegaconf wandb plotly pyzmq msgpack msgpack-numpy streamlit
+    torchcodec omegaconf wandb npm plotly pyzmq msgpack msgpack-numpy streamlit
 
 RUN python -c "import torch; print(torch.__version__, torch.cuda.is_available())" && \
     python -c "from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy; print('lerobot OK')"
