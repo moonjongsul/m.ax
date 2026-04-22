@@ -9,10 +9,10 @@ __pypackages__/
 node_modules/
 checkpoints/
 datasets/
-ros2/build
-ros2/install
-ros2/log
-
+ros2/build/
+ros2/install/
+ros2/log/
+thirdparty/physical_ai_tools/
 # Lock files
 poetry.lock
 uv.lock
