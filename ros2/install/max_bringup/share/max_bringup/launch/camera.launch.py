@@ -1,1 +1,0 @@
-/workspace/m.ax/ros2/build/max_bringup/launch/camera.launch.py
