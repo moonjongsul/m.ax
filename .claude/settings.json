@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -m py_compile max_server/max_server/utils/config_loader.py max_server/max_server/communication/communicator.py max_server/max_server/inference/inference_manager.py max_server/max_server/task_manager/task_manager.py max_server/max_server/task_planner/task_planner.py max_server/max_server/max_server_node.py)"
+    ]
+  }
+}
