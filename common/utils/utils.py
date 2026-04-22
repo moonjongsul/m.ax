@@ -17,3 +17,4 @@ def load_config(fname: Path, project: str) -> DictConfig:
 
     cfg = OmegaConf.merge(server_cfg, proj_cfg)
     return cfg
+
