@@ -34,13 +34,26 @@ from rclpy.context import Context
 from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 
-from common.utils.ros_utils import resolve_msg_type
+# from common.utils.ros_utils import resolve_msg_type
+from geometry_msgs.msg import PoseStamped
+from sensor_msgs.msg import JointState, CompressedImage
+from std_msgs.msg import Float32
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "thirdparty" / "lerobot" / "src"))
 from lerobot.datasets.lerobot_dataset import LeRobotDataset  # noqa: E402
 
 
 # ─── 설정 파싱 ────────────────────────────────────────────────────────────────
+MSG_TYPE_MAP = {
+    'sensor_msgs/JointState':           JointState,
+    'sensor_msgs/msg/JointState':       JointState,
+    'std_msgs/Float32':                 Float32,
+    'std_msgs/msg/Float32':             Float32,
+    'sensor_msgs/CompressedImage':      CompressedImage,
+    'sensor_msgs/msg/CompressedImage':  CompressedImage,
+    'geometry_msgs/PoseStamped':        PoseStamped,
+    'geometry_msgs/msg/PoseStamped':    PoseStamped,
+}
 
 @dataclass
 class CameraSpec:
@@ -90,6 +103,11 @@ def _first_topic(d: dict) -> tuple[str, dict]:
         return k, v
     raise ValueError("topic dict가 비어있습니다.")
 
+def resolve_msg_type(type_str: str):
+    if type_str not in MSG_TYPE_MAP:
+        raise ValueError(f"Unsupported message type: '{type_str}'. "
+                         f"Available: {list(MSG_TYPE_MAP.keys())}")
+    return MSG_TYPE_MAP[type_str]
 
 def load_config(path: Path) -> CollectConfig:
     with open(path) as f:
@@ -774,7 +792,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="ROS2 → LeRobot data collector")
     parser.add_argument(
         "--config", type=Path,
-        default=Path("/workspace/m.ax/config/data_collect_config.yaml"),
+        default=Path("/workspace/m.ax/config/proj_gt_kitting_config.yaml"),
     )
     args = parser.parse_args()
 

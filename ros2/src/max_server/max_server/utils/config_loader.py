@@ -1,34 +1,48 @@
-"""Config loader: YAML -> plain dict."""
+"""Config helpers: parse 'name:topic' entries and resolve msg types by role."""
 
-from pathlib import Path
-
-import yaml
-
-
-def load_config(path: str | Path) -> dict:
-    path = Path(path)
-    if not path.exists():
-        raise FileNotFoundError(f"Config file not found: {path}")
-    with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+from sensor_msgs.msg import CompressedImage, JointState
+from std_msgs.msg import Float32
+from geometry_msgs.msg import PoseStamped
 
 
-MSG_TYPE_MAP = {
-    "sensor_msgs/msg/JointState": ("sensor_msgs.msg", "JointState"),
-    "sensor_msgs/msg/CompressedImage": ("sensor_msgs.msg", "CompressedImage"),
-    "geometry_msgs/msg/PoseStamped": ("geometry_msgs.msg", "PoseStamped"),
-    "std_msgs/msg/Float32": ("std_msgs.msg", "Float32"),
+# Fixed mapping from role name -> ROS message class.
+# Entry names in the YAML config are matched against these keys.
+ROLE_MSG_TYPES = {
+    # robot
+    "joint_state": JointState,
+    "current_pose": PoseStamped,
+    "goal_pose": PoseStamped,
+    # gripper
+    "gripper_state": JointState,
+    "gripper_command": Float32,
 }
 
 
-def resolve_msg_type(type_str: str):
-    """Resolve ROS 2 message type string like 'sensor_msgs/msg/JointState' to class."""
-    if type_str not in MSG_TYPE_MAP:
+CAMERA_MSG_TYPE = CompressedImage
+
+
+def resolve_role_msg_type(role: str):
+    """Return the ROS message class for a role name (robot/gripper entries)."""
+    if role not in ROLE_MSG_TYPES:
         raise ValueError(
-            f"Unsupported message type: '{type_str}'. "
-            f"Available: {list(MSG_TYPE_MAP.keys())}"
+            f"Unknown role '{role}'. Known roles: {list(ROLE_MSG_TYPES)}"
         )
-    module_name, class_name = MSG_TYPE_MAP[type_str]
-    import importlib
-    module = importlib.import_module(module_name)
-    return getattr(module, class_name)
+    return ROLE_MSG_TYPES[role]
+
+
+def parse_entry(entry: str) -> dict:
+    """Parse a 'name:topic' string into a dict.
+
+    Note: topic paths may contain slashes but not colons, so a single-colon
+    split is unambiguous.
+    """
+    if ":" not in entry:
+        raise ValueError(
+            f"Invalid entry format: '{entry}'. Expected 'name:topic'"
+        )
+    name, topic = entry.split(":", 1)
+    return {"name": name, "topic": topic}
+
+
+def parse_entry_list(entries: list[str]) -> list[dict]:
+    return [parse_entry(e) for e in entries]

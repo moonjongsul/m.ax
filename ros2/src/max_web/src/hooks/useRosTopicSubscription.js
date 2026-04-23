@@ -1,4 +1,4 @@
-import ROSLIB from 'roslib'
+import * as ROSLIB from 'roslib'
 import { useEffect } from 'react'
 import { useSelector } from 'react-redux'
 import { getRos } from './useRosConnection'

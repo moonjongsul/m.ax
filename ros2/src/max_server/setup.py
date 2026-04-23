@@ -27,7 +27,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'max_server_node = max_server.max_server_node:main',
+            'max_server = max_server.max_server:main',
         ],
     },
 )

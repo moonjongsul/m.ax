@@ -1,0 +1,14 @@
+# Goal
+string framework
+string policy
+string checkpoint
+string device
+string dtype
+---
+# Result
+bool success
+string message
+---
+# Feedback
+string stage          # "starting" | "unloading_previous" | "loading" | "postprocessing" | "done"
+string detail

@@ -14,7 +14,7 @@ def generate_launch_description():
         description="Launch camera drivers (RealSense + Orbbec)",
     )
     use_domain_bridge_arg = DeclareLaunchArgument(
-        "use_domain_bridge", default_value="true",
+        "use_domain_bridge", default_value="false",
         description="Launch domain_bridge (forwards camera topics from domain 1 -> 0)",
     )
 
@@ -41,7 +41,9 @@ def generate_launch_description():
     return LaunchDescription([
         use_cameras_arg,
         use_domain_bridge_arg,
+        
         cameras,
-        domain_bridge,
         max_server,
+        # domain_bridge,
+        
     ])

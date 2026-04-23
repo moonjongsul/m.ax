@@ -4,9 +4,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument,
-    GroupAction,
     IncludeLaunchDescription,
-    SetEnvironmentVariable,
     TimerAction,
 )
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -16,26 +14,27 @@ from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    cam_domain_id_arg = DeclareLaunchArgument(
-        'cam_domain_id',
-        default_value='1',
-        description='ROS_DOMAIN_ID used by camera nodes',
+    video_domain_arg = DeclareLaunchArgument(
+        "video_domain_id",
+        default_value="1",
+        description="ROS_DOMAIN_ID for web_video_server (must match camera.ros_domain_id)",
     )
-    cam_domain_id = LaunchConfiguration('cam_domain_id')
 
-    set_domain_env = SetEnvironmentVariable(
-        name='ROS_DOMAIN_ID',
-        value=cam_domain_id,
-    )
+    # Pass ROS_DOMAIN_ID explicitly to each Node via additional_env — relying
+    # on SetEnvironmentVariable alone is unreliable because the parent shell's
+    # exported ROS_DOMAIN_ID can still leak into TimerAction-delayed spawns.
+    cam_env = {'ROS_DOMAIN_ID': LaunchConfiguration("video_domain_id")}
 
     # ── RealSense ───────────────────────────────────────────────────────
-    rs_front = Node(
+    # realsense D405
+    rs_wrist_front = Node(
         package='realsense2_camera',
         executable='realsense2_camera_node',
-        namespace='/wrist',
-        name='front',
+        namespace='/observation',
+        name='wrist_front',
         output='screen',
         emulate_tty=True,
+        additional_env=cam_env,
         parameters=[{
             'serial_no': '_315122272391',
             'enable_depth': False,
@@ -45,13 +44,15 @@ def generate_launch_description():
         }],
     )
 
-    rs_rear = Node(
+    # realsense D405
+    rs_wrist_rear = Node(
         package='realsense2_camera',
         executable='realsense2_camera_node',
-        namespace='/wrist',
-        name='rear',
+        namespace='/observation',
+        name='wrist_rear',
         output='screen',
         emulate_tty=True,
+        additional_env=cam_env,
         parameters=[{
             'serial_no': '_335122271613',
             'enable_depth': False,
@@ -63,51 +64,47 @@ def generate_launch_description():
         }],
     )
 
-    # ── Orbbec Gemini2 멀티카메라 (primary/secondary sync) ───────────────
-    orbbec_share = get_package_share_directory('orbbec_camera')
-    gemini2_launch = os.path.join(orbbec_share, 'launch', 'gemini2.launch.py')
-    primary_config = os.path.join(orbbec_share, 'config', 'camera_params.yaml')
-    secondary_config = os.path.join(
-        orbbec_share, 'config', 'camera_secondary_params.yaml'
+    # realsense D435
+    rs_front_view = Node(
+        package='realsense2_camera',
+        executable='realsense2_camera_node',
+        namespace='/observation',
+        name='front_view',
+        output='screen',
+        emulate_tty=True,
+        additional_env=cam_env,
+        parameters=[{
+            'serial_no': '_233622071056',
+            'enable_color': True,
+            'enable_depth': True,
+            'enable_infra1': False,
+            'enable_infra2': False,
+            'enable_gyro': False,
+            'enable_accel': False,
+            'rgb_camera.color_profile': '640x480x30',
+        }],
     )
 
-    common_color_args = {
-        'color_width': '640',
-        'color_height': '480',
-        'color_fps': '30',
-        'enable_color_auto_exposure': 'true',
-        'color_ae_max_exposure': '800',
-        'color_brightness': '85',
-        'enable_depth': 'false',
-        'enable_ir': 'false',
-        'enable_pointcloud': 'false',
-        'device_num': '2',
-    }
-
-    orbbec_primary = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(gemini2_launch),
-        launch_arguments={
-            **common_color_args,
-            'camera_name': 'front_view',
-            'serial_number': 'AY35C3200EM',
-            'usb_port': '6-1.3.3',
-            'sync_mode': 'primary',
-            'config_file_path': primary_config,
-            'trigger_out_enabled': 'true',
-        }.items(),
-    )
-
-    orbbec_secondary = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(gemini2_launch),
-        launch_arguments={
-            **common_color_args,
-            'camera_name': 'side_view',
-            'serial_number': 'AY3794301V0',
-            'usb_port': '6-1.3.2',
-            'sync_mode': 'secondary_synced',
-            'config_file_path': secondary_config,
-            'trigger_out_enabled': 'false',
-        }.items(),
+    # realsense D435I (has IMU/Motion module; keep depth enabled at low rate
+    # so base_stream can be resolved — depth topic can be ignored downstream)
+    rs_side_view = Node(
+        package='realsense2_camera',
+        executable='realsense2_camera_node',
+        namespace='/observation',
+        name='side_view',
+        output='screen',
+        emulate_tty=True,
+        additional_env=cam_env,
+        parameters=[{
+            'serial_no': '_238722071506',
+            'enable_color': True,
+            'enable_depth': True,
+            'enable_infra1': False,
+            'enable_infra2': False,
+            'enable_gyro': False,
+            'enable_accel': False,
+            'rgb_camera.color_profile': '640x480x30',
+        }],
     )
 
     # ── domain_bridge ───────────────────────────────────────────────────
@@ -125,15 +122,14 @@ def generate_launch_description():
     # RealSense front → rear → Orbbec secondary → Orbbec primary → domain_bridge
     # (Orbbec primary는 secondary 이후에 기동해야 sync trigger가 맞음)
     staged = [
-        TimerAction(period=0.0, actions=[rs_front]),
-        TimerAction(period=2.0, actions=[rs_rear]),
-        TimerAction(period=4.0, actions=[GroupAction([orbbec_secondary])]),
-        TimerAction(period=6.0, actions=[GroupAction([orbbec_primary])]),
+        TimerAction(period=0.0, actions=[rs_wrist_front]),
+        TimerAction(period=2.0, actions=[rs_wrist_rear]),
+        TimerAction(period=4.0, actions=[rs_front_view]),
+        TimerAction(period=6.0, actions=[rs_side_view]),
         # TimerAction(period=8.0, actions=[domain_bridge_launch]),
     ]
 
     return LaunchDescription([
-        cam_domain_id_arg,
-        set_domain_env,
+        video_domain_arg,
         *staged,
     ])

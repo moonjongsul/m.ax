@@ -2,10 +2,10 @@ import { useSelector } from 'react-redux'
 import { selectVideoBaseUrl } from '../features/ros/rosSlice'
 
 const CAMERA_TOPICS = [
-  { name: 'wrist_front', topic: '/wrist/front/color/image_raw' },
-  { name: 'wrist_rear',  topic: '/wrist/rear/color/image_raw' },
-  { name: 'front_view',  topic: '/front_view/color/image_raw' },
-  { name: 'side_view',   topic: '/side_view/color/image_raw' },
+  { name: 'wrist_front', topic: '/observation/wrist_front/color/image_raw' },
+  { name: 'wrist_rear',  topic: '/observation/wrist_rear/color/image_raw' },
+  { name: 'front_view',  topic: '/observation/front_view/color/image_raw' },
+  { name: 'side_view',   topic: '/observation/side_view/color/image_raw' },
 ]
 
 export default function CameraView() {

@@ -1,0 +1,103 @@
+max_server:
+  ros__parameters:
+    # ── Inference defaults ─────────────────────────────────────────────
+    inference:
+      fps: 30.0
+      default_framework: lerobot
+      default_policy: smolvla
+      default_dtype: bfloat16
+      default_expression_type: rot6d
+      default_checkpoint: /workspace/m.ax/checkpoints/smolvla_kitting_rot6d_b24/checkpoints/042000/pretrained_model
+      default_task_instruction: "flip part"
+      default_device: cuda
+      ros_domain_id: 0
+      observation_list:
+        - wrist_front
+        - wrist_rear
+        - front_view
+        - side_view
+        - joint_state
+        - current_pose
+        - gripper_state
+
+    # ── Robot ─────────────────────────────────────────────────────────
+    # Format: "role:topic"  (msg type is hardcoded per role in code)
+    robot:
+      ros_domain_id: 0
+      subscribe_list:
+        - "joint_state:/joint_states"
+        - "current_pose:/franka_robot_state_broadcaster/current_pose"
+      publish_list:
+        - "joint_state:/gello/joint_states"
+        - "goal_pose:/max/goal_pose"
+      joint_list:
+        - fr3_joint1
+        - fr3_joint2
+        - fr3_joint3
+        - fr3_joint4
+        - fr3_joint5
+        - fr3_joint6
+        - fr3_joint7
+      pose_frame_id: fr3_link0
+      pose:
+        # home:  # joint space
+        #   - 0.878352701663971
+        #   - 0.3663146495819092
+        #   - 0.20556820929050446
+        #   - -1.6565794944763184
+        #   - -0.06079482287168503
+        #   - 2.0056283473968506
+        #   - 1.8882989883422852
+        # kit:  # joint space
+        #   - -0.22613531351089478
+        #   - -0.052150316536426544
+        #   - 0.3750353157520294
+        #   - -1.90276300907135
+        #   - 0.03822034224867821
+        #   - 1.83684504032135
+        #   - 2.5277857780456543
+        home:   # CS - x, y, z, qx, qy, qz, qw
+          - 0.29986754059791565
+          - 0.5715059041976929
+          - 0.45797157287597656
+          - 0.9179950385692013
+          - -0.3965082125041471
+          - -0.005804473447127222
+          - 0.00571398122328242
+        kit:    # CS - x, y, z, qx, qy, qz, qw
+          - 0.5290104746818542
+          - 0.10076406598091125
+          - 0.4850732386112213
+          - -0.37264924752801937
+          - 0.9278134282211229
+          - 0.0005254212437679931
+          - -0.01716123109869071
+
+    # ── Gripper ───────────────────────────────────────────────────────
+    # Format: "role:topic"
+    gripper:
+      ros_domain_id: 0
+      subscribe_list:
+        - "gripper_state:/dxl_parallel_gripper/joint_states"
+      publish_list:
+        - "gripper_command:/gripper/gripper_client/target_gripper_width_percent"
+      pose:
+        open:
+          - 1.0
+        close:
+          - 0.0
+    # ── Cameras ───────────────────────────────────────────────────────
+    # Format: "name:topic"  (msg type is CompressedImage)
+    camera:
+      ros_domain_id: 1
+      subscribe_list:
+        - "wrist_front:/observation/wrist_front/color/image_raw/compressed"
+        - "wrist_rear:/observation/wrist_rear/color/image_raw/compressed"
+        - "front_view:/observation/front_view/color/image_raw/compressed"
+        - "side_view:/observation/side_view/color/image_raw/compressed"
+      # Per-camera rotation (degrees: 0, 90, 180, 270)
+      rotate:
+        wrist_front: 0
+        wrist_rear: 0
+        front_view: 0
+        side_view: 0

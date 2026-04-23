@@ -2,7 +2,9 @@
 
 from pathlib import Path
 
+import torch
 import numpy as np
+from max_server.data_processing import data_converter as dc
 
 
 DTYPE_MAP = {
@@ -48,8 +50,12 @@ class InferenceManager:
 
             ckpt_path = self._resolve_checkpoint(checkpoint)
 
+            # Release previous policy's GPU memory before loading the new one
+            # to avoid transient ~2x VRAM usage and dangling allocator caches.
+            if self.policy is not None:
+                self.unload()
+
             import importlib
-            import torch
 
             module_path, class_name = LEROBOT_POLICY_MAP[policy].rsplit(".", 1)
             module = importlib.import_module(module_path)
@@ -80,6 +86,10 @@ class InferenceManager:
             return False, f"Policy load failed: {e}"
 
     def unload(self):
+        had_policy = self.policy is not None
+        # Drop refs so Python GC can reclaim the policy object (and all its
+        # CUDA tensors). Also clear preprocessor/postprocessor since they may
+        # hold references to config tensors.
         self.policy = None
         self._preprocessor = None
         self._postprocessor = None
@@ -88,6 +98,17 @@ class InferenceManager:
         self.checkpoint = None
         self.device = None
         self.dtype = None
+
+        if had_policy:
+            import gc
+            gc.collect()
+            try:
+                import torch
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+                    torch.cuda.ipc_collect()
+            except Exception:
+                pass
 
     def is_loaded(self) -> bool:
         return self.policy is not None
@@ -103,11 +124,18 @@ class InferenceManager:
         images: dict[str, np.ndarray],
         state: np.ndarray,
         task_instruction: str,
+        expression_type: str,
     ) -> np.ndarray:
         if self.policy is None:
             raise RuntimeError("Policy not loaded")
 
-        import torch
+        if expression_type == "rot6d":
+            if len(state) != 8:
+                raise ValueError(
+                    f"rot6d expects 8-vec state (xyz+quat+gripper), got {len(state)}"
+                )
+            rot6d = dc.convert_quat_to_rot6d(state[3:-1])
+            state = np.array([*state[:3], *rot6d, state[-1]], dtype=np.float32)
 
         obs: dict = {
             "observation.state": torch.from_numpy(np.asarray(state)).float().unsqueeze(0),
@@ -122,7 +150,21 @@ class InferenceManager:
             action = self.policy.select_action(pre)
             out = self._postprocessor(action) if self._postprocessor else action
 
-        return out.detach().to("cpu").numpy().squeeze(0)
+        # Policies may return [D], [1, D], or action-chunked [1, H, D] / [H, D].
+        # Reduce to a single 1D action vector by taking the first step.
+        result = out.detach().to("cpu").numpy()
+        while result.ndim > 1:
+            result = result[0]
+
+        if expression_type == "rot6d":
+            if len(result) != 10:
+                raise ValueError(
+                    f"rot6d action expected 10-vec (xyz+rot6d+gripper), got {len(result)}"
+                )
+            quat = dc.convert_rot6d_to_quat(result[3:-1])
+            result = np.array([*result[:3], *quat, result[-1]], dtype=np.float32)
+
+        return np.asarray(result, dtype=np.float32)
 
     # ─── Helpers ──────────────────────────────────────────────────────────────
 

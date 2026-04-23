@@ -1,41 +1,40 @@
-import ROSLIB from 'roslib'
+import * as ROSLIB from 'roslib'
 import { useCallback, useRef } from 'react'
 import { getRos } from './useRosConnection'
 
-/**
- * Minimal Action client wrapper using roslibjs.
- * roslibjs ActionClient is rosbridge-based; returns a handle with cancel() and event callbacks.
- */
+// roslib 2.x Action API (ROS 2 native): ROSLIB.Action with sendGoal(goal, onResult, onFeedback, onFailed).
 export function useRosActionClient(serverName, actionType) {
-  const clientRef = useRef(null)
-  const goalRef = useRef(null)
+  const actionRef = useRef(null)
+  const goalIdRef = useRef(null)
 
-  const ensureClient = () => {
+  const ensureAction = () => {
     const ros = getRos()
     if (!ros) { throw new Error('ROS not connected') }
-    if (!clientRef.current) {
-      clientRef.current = new ROSLIB.ActionClient({
+    if (!actionRef.current) {
+      actionRef.current = new ROSLIB.Action({
         ros,
-        serverName,
-        actionName: actionType,
+        name: serverName,
+        actionType,
       })
     }
-    return clientRef.current
+    return actionRef.current
   }
 
-  const sendGoal = useCallback((goalMsg, { onFeedback, onResult } = {}) => {
-    const client = ensureClient()
-    const goal = new ROSLIB.Goal({ actionClient: client, goalMessage: goalMsg })
-    if (onFeedback) { goal.on('feedback', onFeedback) }
-    if (onResult) { goal.on('result', onResult) }
-    goal.send()
-    goalRef.current = goal
-    return goal
+  const sendGoal = useCallback((goalMsg, { onFeedback, onResult, onFailed } = {}) => {
+    const action = ensureAction()
+    const id = action.sendGoal(
+      goalMsg,
+      (result) => { onResult && onResult(result) },
+      (feedback) => { onFeedback && onFeedback(feedback) },
+      (err) => { onFailed ? onFailed(err) : console.error('[action] failed:', err) },
+    )
+    goalIdRef.current = id
+    return id
   }, [serverName, actionType])
 
   const cancel = useCallback(() => {
-    if (goalRef.current) {
-      try { goalRef.current.cancel() } catch { /* noop */ }
+    if (actionRef.current && goalIdRef.current) {
+      try { actionRef.current.cancelGoal(goalIdRef.current) } catch { /* noop */ }
     }
   }, [])
 

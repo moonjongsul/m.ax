@@ -1,8 +1,0 @@
-string framework
-string policy
-string checkpoint
-string device
-string dtype
----
-bool success
-string message

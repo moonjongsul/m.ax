@@ -20,17 +20,22 @@ const initialState = {
   step: 0,
   lastAction: [],
 
-  // form state
+  // form state — populated from /inference/status defaults on first receipt.
+  // User edits afterwards are preserved; defaults are not re-applied.
   form: {
-    framework: 'lerobot',
-    policy: 'smolvla',
-    checkpoint:
-      '/workspace/m.ax/checkpoints/local_260410/smolvla_kitting_scratch_b32/checkpoints/082000/pretrained_model',
-    device: 'cuda',
-    dtype: 'bfloat16',
-    taskInstruction: 'pick part and flip part',
-    expressionType: 'rot6d',
+    framework: '',
+    policy: '',
+    checkpoint: '',
+    device: '',
+    dtype: '',
+    taskInstruction: '',
+    expressionType: '',
   },
+  formInitialized: false,
+
+  // Preset poses from YAML (names only; values stay on the server).
+  robotPoseNames: [],
+  gripperPoseNames: [],
 }
 
 const inferenceSlice = createSlice({
@@ -51,6 +56,29 @@ const inferenceSlice = createSlice({
       state.taskInstruction = s.task_instruction || ''
       state.expressionType = s.expression_type || ''
       state.step = s.step || 0
+
+      state.robotPoseNames = s.robot_pose_names || []
+      state.gripperPoseNames = s.gripper_pose_names || []
+
+      // One-time form init from server-provided defaults.
+      if (!state.formInitialized) {
+        const hasAnyDefault =
+          s.default_framework || s.default_policy || s.default_checkpoint ||
+          s.default_device || s.default_dtype ||
+          s.default_task_instruction || s.default_expression_type
+        if (hasAnyDefault) {
+          state.form = {
+            framework: s.default_framework || '',
+            policy: s.default_policy || '',
+            checkpoint: s.default_checkpoint || '',
+            device: s.default_device || '',
+            dtype: s.default_dtype || '',
+            taskInstruction: s.default_task_instruction || '',
+            expressionType: s.default_expression_type || '',
+          }
+          state.formInitialized = true
+        }
+      }
     },
     setFeedback(state, action) {
       const f = action.payload
@@ -59,9 +87,16 @@ const inferenceSlice = createSlice({
     },
     setFormField(state, action) {
       state.form[action.payload.key] = action.payload.value
+      // Any user edit means the form is considered initialized; defaults
+      // won't overwrite it later.
+      state.formInitialized = true
+    },
+    resetFormToDefaults(state) {
+      // Force next status receipt to re-populate form from defaults.
+      state.formInitialized = false
     },
   },
 })
 
-export const { setStatus, setFeedback, setFormField } = inferenceSlice.actions
+export const { setStatus, setFeedback, setFormField, resetFormToDefaults } = inferenceSlice.actions
 export default inferenceSlice.reducer

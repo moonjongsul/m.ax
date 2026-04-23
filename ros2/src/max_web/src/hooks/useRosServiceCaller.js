@@ -1,4 +1,4 @@
-import ROSLIB from 'roslib'
+import * as ROSLIB from 'roslib'
 import { useCallback } from 'react'
 import { getRos } from './useRosConnection'
 
@@ -8,7 +8,7 @@ export function useRosServiceCaller() {
       const ros = getRos()
       if (!ros) { reject(new Error('ROS not connected')); return }
       const svc = new ROSLIB.Service({ ros, name, serviceType: type })
-      const req = new ROSLIB.ServiceRequest(payload || {})
+      const req = payload || {}
       const timer = setTimeout(() => reject(new Error(`service timeout: ${name}`)), timeoutMs)
       svc.callService(req, (res) => {
         clearTimeout(timer)

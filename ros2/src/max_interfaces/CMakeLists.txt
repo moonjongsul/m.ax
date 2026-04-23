@@ -12,7 +12,10 @@ find_package(action_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/InferenceStatus.msg"
-  "srv/LoadPolicy.srv"
+  "msg/RobotStatesPackage.msg"
+  "srv/UnloadPolicy.srv"
+  "srv/MoveToPose.srv"
+  "action/LoadPolicy.action"
   "action/RunInference.action"
   DEPENDENCIES std_msgs action_msgs
 )

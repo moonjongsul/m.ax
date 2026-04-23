@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { setFormField } from '../features/inference/inferenceSlice'
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller'
+import { useRosActionClient } from '../hooks/useRosActionClient'
 
 function Field({ label, value, onChange, disabled, placeholder }) {
   return (
@@ -24,23 +25,56 @@ export default function PolicyLoader() {
   const form = useSelector((s) => s.inference.form)
   const serverState = useSelector((s) => s.inference.serverState)
   const { call } = useRosServiceCaller()
-  const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState(null)
+  const loadAction = useRosActionClient('/inference/load_policy', 'max_interfaces/action/LoadPolicy')
 
-  const disabled = busy || serverState === 'loading' || serverState === 'running'
+  const [busy, setBusy] = useState(false)
+  const [stage, setStage] = useState('')
+  const [result, setResult] = useState(null)
+  const goalRef = useRef(null)
+
+  const inputsDisabled = busy || serverState === 'loading' || serverState === 'running'
+  const loadDisabled = busy || serverState === 'loading' || serverState === 'running'
+  const unloadDisabled = busy || serverState !== 'ready'
+
   const set = (key) => (value) => dispatch(setFormField({ key, value }))
 
-  const onLoad = async () => {
+  const onLoad = () => {
+    setBusy(true)
+    setResult(null)
+    setStage('sending…')
+    try {
+      const goal = loadAction.sendGoal(
+        {
+          framework: form.framework,
+          policy: form.policy,
+          checkpoint: form.checkpoint,
+          device: form.device,
+          dtype: form.dtype,
+        },
+        {
+          onFeedback: (fb) => {
+            setStage(fb.detail ? `${fb.stage}: ${fb.detail}` : fb.stage)
+          },
+          onResult: (result) => {
+            setBusy(false)
+            setStage('')
+            setResult(result)
+          },
+        },
+      )
+      goalRef.current = goal
+    } catch (e) {
+      setBusy(false)
+      setStage('')
+      setResult({ success: false, message: String(e.message || e) })
+    }
+  }
+
+  const onUnload = async () => {
     setBusy(true)
     setResult(null)
     try {
-      const res = await call('/inference/load_policy', 'max_interfaces/srv/LoadPolicy', {
-        framework: form.framework,
-        policy: form.policy,
-        checkpoint: form.checkpoint,
-        device: form.device,
-        dtype: form.dtype,
-      })
+      const res = await call('/inference/unload_policy', 'max_interfaces/srv/UnloadPolicy', {})
       setResult(res)
     } catch (e) {
       setResult({ success: false, message: String(e.message || e) })
@@ -52,18 +86,30 @@ export default function PolicyLoader() {
   return (
     <div className="bg-white rounded-lg shadow p-4 space-y-3">
       <h3 className="text-lg font-semibold">Load Policy</h3>
-      <Field label="Framework" value={form.framework} onChange={set('framework')} disabled={disabled} placeholder="lerobot" />
-      <Field label="Policy"    value={form.policy}    onChange={set('policy')}    disabled={disabled} placeholder="pi0.5 | smolvla" />
-      <Field label="Checkpoint" value={form.checkpoint} onChange={set('checkpoint')} disabled={disabled} placeholder="/path or HF repo" />
-      <Field label="Device"    value={form.device}    onChange={set('device')}    disabled={disabled} placeholder="cuda | cpu" />
-      <Field label="dtype"     value={form.dtype}     onChange={set('dtype')}     disabled={disabled} placeholder="bfloat16 | float32" />
-      <button
-        onClick={onLoad}
-        disabled={disabled}
-        className="w-full rounded bg-blue-600 text-white py-2 disabled:bg-gray-300"
-      >
-        {busy ? 'Loading…' : 'Load'}
-      </button>
+      <Field label="Framework" value={form.framework} onChange={set('framework')} disabled={inputsDisabled} placeholder="lerobot" />
+      <Field label="Policy"    value={form.policy}    onChange={set('policy')}    disabled={inputsDisabled} placeholder="pi0.5 | smolvla" />
+      <Field label="Checkpoint" value={form.checkpoint} onChange={set('checkpoint')} disabled={inputsDisabled} placeholder="/path or HF repo" />
+      <Field label="Device"    value={form.device}    onChange={set('device')}    disabled={inputsDisabled} placeholder="cuda | cpu" />
+      <Field label="dtype"     value={form.dtype}     onChange={set('dtype')}     disabled={inputsDisabled} placeholder="bfloat16 | float32" />
+      <div className="grid grid-cols-2 gap-2">
+        <button
+          onClick={onLoad}
+          disabled={loadDisabled}
+          className="rounded bg-blue-600 text-white py-2 disabled:bg-gray-300"
+        >
+          {busy && stage ? 'Loading…' : 'Load'}
+        </button>
+        <button
+          onClick={onUnload}
+          disabled={unloadDisabled}
+          className="rounded bg-gray-600 text-white py-2 disabled:bg-gray-300"
+        >
+          Unload
+        </button>
+      </div>
+      {stage && (
+        <p className="text-xs text-gray-500">{stage}</p>
+      )}
       {result && (
         <p className={`text-sm ${result.success ? 'text-green-600' : 'text-red-600'}`}>
           {result.message}
