@@ -40,6 +40,7 @@ from sensor_msgs.msg import JointState, CompressedImage
 from std_msgs.msg import Float32
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "thirdparty" / "lerobot" / "src"))
+from lerobot.datasets.dataset_tools import delete_episodes  # noqa: E402
 from lerobot.datasets.lerobot_dataset import LeRobotDataset  # noqa: E402
 
 
@@ -305,6 +306,7 @@ def render(
     task_index: int,
     task_total: int,
     pending_saves: int = 0,
+    pending_deletes: int = 0,
 ) -> np.ndarray:
     cam_order = [c.name for c in cfg.cameras]
     grid = _build_grid(cam_images, cam_order, cfg.img_shape)
@@ -318,8 +320,15 @@ def render(
     ep_text = f"saved: {saved_episodes}   current: #{current_episode}"
     if pending_saves > 0:
         ep_text += f"   (saving {pending_saves})"
+    if pending_deletes > 0:
+        ep_text += f"   (deleting {pending_deletes})"
     (tw, _), _ = cv2.getTextSize(ep_text, cv2.FONT_HERSHEY_SIMPLEX, 1.1, 2)
-    color = (100, 180, 255) if pending_saves > 0 else (255, 220, 120)
+    if pending_deletes > 0:
+        color = (120, 120, 255)
+    elif pending_saves > 0:
+        color = (100, 180, 255)
+    else:
+        color = (255, 220, 120)
     _put_text(header, ep_text, (gw - tw - 16, 44), color, 1.1)
     grid = np.vstack([header, grid])
 
@@ -440,6 +449,7 @@ class EpisodeRecorder:
 
     _CMD_SAVE = "save"
     _CMD_DISCARD = "discard"
+    _CMD_DELETE_LAST = "delete_last"
     _CMD_FINALIZE = "finalize"
 
     def __init__(self, cfg: CollectConfig) -> None:
@@ -454,6 +464,22 @@ class EpisodeRecorder:
         dataset_root = cfg.output_dir / cfg.repo_id
         self.dataset_root = dataset_root
 
+        # 이전 delete_last 도중 죽은 흔적 자동 복구.
+        # 임계 구간이 짧긴 하지만 ^C/SIGKILL 등으로 swap 중간에 죽으면 잔해가 남는다.
+        import shutil
+        tmp_root = dataset_root.parent / f"{dataset_root.name}.delete_tmp"
+        backup_root = dataset_root.parent / f"{dataset_root.name}.delete_bak"
+        if not dataset_root.exists() and backup_root.exists():
+            print(f"[lerobot] 이전 delete_last 인터럽트 감지 → 백업으로 롤백: {backup_root.name}")
+            backup_root.rename(dataset_root)
+            if tmp_root.exists():
+                shutil.rmtree(tmp_root)
+        else:
+            for stale in (tmp_root, backup_root):
+                if stale.exists():
+                    print(f"[lerobot] 이전 작업 잔해 정리: {stale.name}")
+                    shutil.rmtree(stale)
+
         # 로컬 데이터셋 유효성 판정: meta/info.json 과 meta/tasks.parquet 이 모두 존재해야 완전한 상태.
         # (에피소드 저장 도중 중단된 경우 info.json만 남을 수 있음 → 원격 fallback 방지 위해 정리)
         info_file = dataset_root / "meta" / "info.json"
@@ -462,7 +488,6 @@ class EpisodeRecorder:
         is_half_baked = dataset_root.exists() and not is_complete
 
         if is_half_baked:
-            import shutil
             print(f"[lerobot] 불완전한 기존 폴더 정리: {dataset_root}")
             shutil.rmtree(dataset_root)
 
@@ -489,6 +514,8 @@ class EpisodeRecorder:
         self._num_saved = int(self.dataset.num_episodes)
         # 워커가 현재 처리 중인 저장 작업 수 (UI 표시용)
         self._pending_saves = 0
+        # 워커가 현재 처리 중인 마지막 에피소드 삭제 작업 수 (UI 표시용)
+        self._pending_deletes = 0
         self._worker = threading.Thread(
             target=self._run_worker, daemon=True, name="lerobot-recorder"
         )
@@ -514,6 +541,11 @@ class EpisodeRecorder:
                     self.dataset.clear_episode_buffer(delete_images=True)
                     with self._state_lock:
                         self._pending_saves -= 1
+                elif kind == self._CMD_DELETE_LAST:
+                    self._delete_last_episode()
+                    with self._state_lock:
+                        self._num_saved = int(self.dataset.num_episodes)
+                        self._pending_deletes -= 1
                 elif kind == self._CMD_FINALIZE:
                     done_evt: threading.Event = item[1]
                     self.dataset.finalize()
@@ -524,6 +556,9 @@ class EpisodeRecorder:
                 if kind in (self._CMD_SAVE, self._CMD_DISCARD):
                     with self._state_lock:
                         self._pending_saves -= 1
+                elif kind == self._CMD_DELETE_LAST:
+                    with self._state_lock:
+                        self._pending_deletes -= 1
             finally:
                 self._queue.task_done()
 
@@ -560,6 +595,15 @@ class EpisodeRecorder:
             self._pending_saves += 1
         self._queue.put((self._CMD_DISCARD,))
 
+    def delete_last(self) -> bool:
+        """마지막 저장 에피소드 삭제 요청. 처리할 게 없으면 False."""
+        with self._state_lock:
+            if self._num_saved <= 0:
+                return False
+            self._pending_deletes += 1
+        self._queue.put((self._CMD_DELETE_LAST,))
+        return True
+
     def finalize(self) -> None:
         """모든 pending 작업 flush 후 finalize. 블로킹."""
         done = threading.Event()
@@ -576,6 +620,82 @@ class EpisodeRecorder:
     def pending_saves(self) -> int:
         with self._state_lock:
             return self._pending_saves
+
+    @property
+    def pending_deletes(self) -> int:
+        with self._state_lock:
+            return self._pending_deletes
+
+    # ── 워커 스레드에서만 호출 ───────────────────────────────────────
+    def _delete_last_episode(self) -> None:
+        import shutil
+        import signal
+
+        from lerobot.datasets.io_utils import load_episodes
+
+        if int(self.dataset.num_episodes) <= 0:
+            print("[delete_last] 저장된 에피소드 없음")
+            return
+
+        # 진행 중인 episode buffer / image writer 정리
+        if self.dataset.episode_buffer is not None:
+            self.dataset.clear_episode_buffer(delete_images=True)
+        self.dataset.stop_image_writer()
+
+        # 메모리에 버퍼링된 episodes 메타를 디스크에 flush + writer 닫기
+        # (이걸 안 하면 meta.episodes(HF Dataset) size와 num_episodes 카운터가 어긋나
+        #  delete_episodes 내부의 meta.episodes[idx] 인덱싱이 IndexError를 낸다.)
+        self.dataset._close_writer()
+        self.dataset.meta._close_writer()
+        self.dataset.meta.episodes = load_episodes(self.dataset.meta.root)
+
+        last_idx = int(self.dataset.num_episodes) - 1
+        if last_idx >= len(self.dataset.meta.episodes):
+            print(f"[delete_last] flush 후에도 episodes 메타 부족 "
+                  f"(num_episodes={self.dataset.num_episodes}, "
+                  f"meta.episodes={len(self.dataset.meta.episodes)}). 중단.")
+            return
+
+        print(f"[delete_last] ep#{last_idx} 삭제 중... (전체 데이터셋 재기록)")
+
+        tmp_root = self.dataset_root.parent / f"{self.dataset_root.name}.delete_tmp"
+        backup_root = self.dataset_root.parent / f"{self.dataset_root.name}.delete_bak"
+        for stale in (tmp_root, backup_root):
+            if stale.exists():
+                shutil.rmtree(stale)
+
+        new_dataset = delete_episodes(
+            self.dataset,
+            episode_indices=[last_idx],
+            output_dir=tmp_root,
+            repo_id=self.cfg.repo_id,
+        )
+        del new_dataset  # 사용 안 함: 최종 root에서 다시 로드
+
+        # ── 임계 구간: SIGINT 차단하고 폴더 swap ─────────────────────
+        # (이 구간에서 ^C 받으면 데이터셋 손상 가능)
+        try:
+            signal.pthread_sigmask(signal.SIG_BLOCK, [signal.SIGINT])
+        except (AttributeError, ValueError):
+            pass  # Windows 등 비지원 플랫폼
+        try:
+            self.dataset_root.rename(backup_root)
+            try:
+                tmp_root.rename(self.dataset_root)
+            except Exception:
+                backup_root.rename(self.dataset_root)  # 롤백
+                raise
+            shutil.rmtree(backup_root)
+        finally:
+            try:
+                signal.pthread_sigmask(signal.SIG_UNBLOCK, [signal.SIGINT])
+            except (AttributeError, ValueError):
+                pass
+
+        # 최종 root에서 다시 로드
+        self.dataset = LeRobotDataset(repo_id=self.cfg.repo_id, root=self.dataset_root)
+        self.dataset.start_image_writer(num_processes=0, num_threads=4)
+        print(f"[delete_last] 완료. 남은 에피소드: {int(self.dataset.num_episodes)}")
 
 
 # ─── 메인 루프 ───────────────────────────────────────────────────────────────
@@ -700,6 +820,17 @@ class DataCollector:
             self._recording = False
             self._rec_start_ts = None
             self._frame_count = 0
+        elif ascii_key == ord("t"):
+            if self._recording:
+                print("[key:t] 녹화 중에는 마지막 에피소드 삭제 불가")
+            elif self.recorder.pending_saves > 0 or self.recorder.pending_deletes > 0:
+                print("[key:t] 워커가 처리 중인 작업이 있어 대기 필요")
+            elif self.recorder.num_saved <= 0:
+                print("[key:t] 삭제할 에피소드 없음")
+            else:
+                target = self.recorder.num_saved - 1
+                if self.recorder.delete_last():
+                    print(f"[key:t] 마지막 에피소드(ep#{target}) 삭제 요청 (async)")
         elif ascii_key == ord("q"):
             if self._recording:
                 print("[key:q] 녹화 중 종료 → discard")
@@ -715,8 +846,8 @@ class DataCollector:
         cfg = self.cfg
         period = 1.0 / cfg.hz
         cv2.namedWindow(_WINDOW_NAME, cv2.WINDOW_NORMAL)
-        print("[data_collect] ready — s: start, space: save, r: discard, q: quit,"
-              "  ←/→: prev/next task")
+        print("[data_collect] ready — s: start, space: save, r: discard,"
+              " t: delete last saved, q: quit,  ←/→: prev/next task")
 
         while True:
             tick = time.time()
@@ -760,6 +891,7 @@ class DataCollector:
             # 시각화
             saved_eps = self.recorder.num_saved
             pending = self.recorder.pending_saves
+            pending_del = self.recorder.pending_deletes
             task_ids = cfg.task_ids
             active = self.recorder.active_task
             task_idx = task_ids.index(active) if active in task_ids else 0
@@ -772,6 +904,7 @@ class DataCollector:
                 task_index=task_idx,
                 task_total=len(task_ids),
                 pending_saves=pending,
+                pending_deletes=pending_del,
             )
             cv2.imshow(_WINDOW_NAME, canvas)
             key = cv2.waitKeyEx(1)

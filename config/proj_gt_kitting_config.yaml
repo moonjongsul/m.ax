@@ -85,12 +85,12 @@ env:
       topic:
         ros_domain_id: 1
         subscribe:
-          /wrist/front/color/image_raw/compressed:
+          /observation/wrist_front/color/image_raw/compressed:
             type: 'sensor_msgs/msg/CompressedImage'
             hz: 30
       port: ''
       serial: ''
-      size: [848, 480]
+      size: [640, 480]
       rotate: 0
     camera_2:
       comm: 'ros2'
@@ -100,42 +100,42 @@ env:
       topic:
         ros_domain_id: 1
         subscribe:
-          /wrist/rear/color/image_raw/compressed:
+          /observation/wrist_rear/color/image_raw/compressed:
             type: 'sensor_msgs/msg/CompressedImage'
             hz: 30
       port: /dev/video1
       serial: ''
-      size: [848, 480]
-      rotate: 180
+      size: [640, 480]
+      rotate: 0
     camera_3:
       comm: 'ros2'
-      type: 'orbbec'
-      model: 'gemini2'
+      type: 'realsense'
+      model: 'd435'
       name: 'front_view'
       topic:
         ros_domain_id: 1
         subscribe:
-          /front_view/color/image_raw/compressed:
+          /observation/front_view/color/image_raw/compressed:
             type: 'sensor_msgs/msg/CompressedImage'
             hz: 30
       port: ''
       serial: ''
-      size: [1280, 720]
+      size: [640, 480]
       rotate: 0
     camera_4:
       comm: 'ros2'
-      type: 'orbbec'
-      model: 'gemini2'
+      type: 'realsense'
+      model: 'd435'
       name: 'side_view'
       topic:
         ros_domain_id: 1
         subscribe:
-          /side_view/color/image_raw/compressed:
+          /observation/side_view/color/image_raw/compressed:
             type: 'sensor_msgs/msg/CompressedImage'
             hz: 30
       port: ''
       serial: ''
-      size: [1280, 720]
+      size: [640, 480]
       rotate: 0
 
 data_collect:
@@ -148,56 +148,56 @@ data_collect:
   task_prompt: 
     flip_object:
       - "flip object"
-      - "flip the object"
       - "flip part"
-      - "flip the part"
-      - "flip the component"
-      - "flip the part over"
+      - "flip component"
+      - "flip part over"
       - "turn object upside down"
-      - "turn the part upside down"
-      - "turn the part over"
-      - "invert the part"
+      - "turn part upside down"
+      - "turn part over"
+      - "invert part"
       - "flip object over"
     pick_object:
       # 핵심 의미: grasp + small lift (잡고 살짝 들어올리기)
       - "pick object"
       - "pick up object"
-      - "pick the object"
-      - "pick up the object"
+      - "pick object"
+      - "pick up object"
       - "pick part"
-      - "pick up the part"
-      - "grasp the part"
-      - "grasp and lift the part"
-      - "grip the part"
-      - "grab the part"
-      - "pick up and hold the part"
-      - "lift the part"
+      - "pick up part"
+      - "grasp part"
+      - "grasp and lift part"
+      - "grip part"
+      - "grab part"
+      - "pick up and hold part"
+      - "lift part"
       - "lift up the part"
     kit_object:
       # 핵심 의미: 정확한 각도로 트레이에 안착 (precision placement)
-      - "kit the part"
-      - "kit the part in the tray"
-      - "kit the part into the tray"
-      - "place the part in the tray"
-      - "place the part into the kit"
-      - "fit the part in the tray"
-      - "fit the part into the kit slot"
-      - "seat the part in the tray"
-      - "align and place the part in the tray"
-      - "insert the part into the kit"
-      - "set the part in the tray"
-      - "position the part in the tray"
-      - "nest the part in the tray"
+      - "kit object"
+      - "kit part"
+      - "kit object in tray"
+      - "kit object into tray"
+      - "kit part into tray"
+      - "place object in tray"
+      - "place object into kit"
+      - "fit part in tray"
+      - "fit object into kit slot"
+      - "seat object in tray"
+      - "align and place object in tray"
+      - "insert object into kit"
+      - "set object in tray"
+      - "position object in tray"
+      - "nest object in tray"
     move_object:
-      - "move the part"           # 가장 안전 (목적지 언급 없음)
-      - "move the object"
-      - "move the component"
-      - "move to the target"
-      - "move to the target location"
-      - "go to the target"
-      - "go to the target position"
-      - "go to the destination"
-      - "reach the target"
-      - "reach the target position"
-      - "approach the target"
-      - "navigate to the target"
+      - "move part"           # 가장 안전 (목적지 언급 없음)
+      - "move object"
+      - "move component"
+      - "move to target"
+      - "move to target location"
+      - "go to target"
+      - "go to target position"
+      - "go to destination"
+      - "reach target"
+      - "reach target position"
+      - "approach target"
+      - "navigate to target"
