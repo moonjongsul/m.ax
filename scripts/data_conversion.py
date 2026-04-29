@@ -317,13 +317,13 @@ def main():
     parser.add_argument(
         "--input-dir",
         type=str,
-        default=None,
+        default="/workspace/m.ax/datasets/manufacturing_kitting_dataset_trimmed",
         help="Local source dataset directory (skips HF download)",
     )
     parser.add_argument(
         "--output-dir",
         type=str,
-        default=None,
+        default="/workspace/m.ax/datasets/manufacturing_kitting_dataset_trimmed",
         help="Local output directory (required with --input-dir)",
     )
     parser.add_argument(

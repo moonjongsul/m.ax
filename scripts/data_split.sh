@@ -7,3 +7,5 @@ lerobot-edit-dataset \
     --operation.type split \
     --operation.splits "{\"flip_object\": [$TASK1], \"kit_object\": [$TASK2]}" \
     --push_to_hub=false
+
+# split 저장 경로: ~/.cache/huggingface/lerobot/
