@@ -1,20 +1,31 @@
 """
 Augment a joint-space LeRobot dataset with EEF task-space representations.
 
-Adds the following keys to each frame (joint-space `action` / `observation.state`
-are kept as-is):
+The original joint-space `action` / `observation.state` are renamed to
+`action.joint_position` / `observation.state.joint_position`, and the
+standard `action` / `observation.state` keys are overwritten with the
+6D rotation EEF representation so that LeRobot policies (which read the
+canonical `action` / `observation.state` keys) train on the rot6d
+representation by default.
 
-  - action                          : [j1..j7, gripper]                       (8D)
-  - action.eef_quaternion           : [x, y, z, qx, qy, qz, qw, gripper]      (8D)
-  - action.eef_rotation_matrix      : [x, y, z, r11..r33, gripper]            (13D)
-  - observation.state                          : [j1..j7, gripper]            (8D)
-  - observation.state.eef_quaternion           : [x, y, z, qx, qy, qz, qw, gripper]     (8D)
+Resulting frame keys:
+
+  - action                                : [x, y, z, r11..r23, gripper]      (10D)  ← rot6d, used by policy
+  - action.joint_position                 : [j1..j7, gripper]                 (8D)
+  - action.eef_quaternion                 : [x, y, z, qx, qy, qz, qw, gripper](8D)
+  - action.eef_rotation_matrix            : [x, y, z, r11..r33, gripper]      (13D)
+  - action.eef_rotation_6d                : [x, y, z, r11..r23, gripper]      (10D)
+  - observation.state                          : [x, y, z, r11..r23, gripper] (10D)  ← rot6d, used by policy
+  - observation.state.joint_position           : [j1..j7, gripper]            (8D)
+  - observation.state.eef_quaternion           : [x, y, z, qx, qy, qz, qw, gripper] (8D)
   - observation.state.eef_rotation_matrix      : [x, y, z, r11..r33, gripper] (13D)
+  - observation.state.eef_rotation_6d          : [x, y, z, r11..r23, gripper] (10D)
 
 FK is computed via pinocchio using the FR3 URDF.
 Gripper action is binarized: >= 0.8 -> 1.0, < 0.8 -> 0.0
 Gripper state is kept as-is.
 Rotation matrix is row-major flattened (numpy default): [r11, r12, r13, r21, r22, r23, r31, r32, r33].
+Rotation 6D keeps the first two rows of the rotation matrix (Zhou et al. 2019).
 
 Usage:
     python scripts/data_conversion.py --repo-id moonjongsul/manufacturing_kitting_dataset
@@ -45,6 +56,12 @@ ROTMAT_NAMES = [
     "r11", "r12", "r13",
     "r21", "r22", "r23",
     "r31", "r32", "r33",
+    "gripper_width",
+]
+ROT6D_NAMES = [
+    "x", "y", "z",
+    "r11", "r12", "r13",
+    "r21", "r22", "r23",
     "gripper_width",
 ]
 
@@ -85,14 +102,15 @@ def joint_to_eef_representations(
     gripper: float,
     fk: FR3Kinematics,
     is_action: bool,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Compute joint / eef_quaternion / eef_rotation_matrix vectors from one frame.
+    Compute joint / eef_quaternion / eef_rotation_matrix / eef_rotation_6d vectors from one frame.
 
     Returns:
         joint     : (8,)  [j1..j7, gripper]
         eef_quat  : (8,)  [x, y, z, qx, qy, qz, qw, gripper]
         eef_rotmat: (13,) [x, y, z, r11..r33 (row-major), gripper]
+        eef_rot6d : (10,) [x, y, z, r11..r23 (first two rows, row-major), gripper]
     """
     pos, rot = fk.forward(joint_positions_rad)
 
@@ -105,7 +123,9 @@ def joint_to_eef_representations(
 
     eef_rotmat = np.concatenate([pos, rot.flatten(), [g]]).astype(np.float32)
 
-    return joint_vec, eef_quat, eef_rotmat
+    eef_rot6d = np.concatenate([pos, rot[:2, :].flatten(), [g]]).astype(np.float32)
+
+    return joint_vec, eef_quat, eef_rotmat, eef_rot6d
 
 
 def convert_parquet(pq_path: Path, fk: FR3Kinematics) -> int:
@@ -118,29 +138,38 @@ def convert_parquet(pq_path: Path, fk: FR3Kinematics) -> int:
     states = np.array(df["observation.state"].tolist())
     actions = np.array(df["action"].tolist())
 
-    state_joint, state_quat, state_rotmat = [], [], []
-    action_joint, action_quat, action_rotmat = [], [], []
+    state_joint, state_quat, state_rotmat, state_rot6d = [], [], [], []
+    action_joint, action_quat, action_rotmat, action_rot6d = [], [], [], []
 
     for i in range(len(df)):
-        sj, sq, sr = joint_to_eef_representations(
+        sj, sq, sr, s6 = joint_to_eef_representations(
             states[i, :7], float(states[i, 7]), fk, is_action=False
         )
-        aj, aq, ar = joint_to_eef_representations(
+        aj, aq, ar, a6 = joint_to_eef_representations(
             actions[i, :7], float(actions[i, 7]), fk, is_action=True
         )
         state_joint.append(sj.tolist())
         state_quat.append(sq.tolist())
         state_rotmat.append(sr.tolist())
+        state_rot6d.append(s6.tolist())
         action_joint.append(aj.tolist())
         action_quat.append(aq.tolist())
         action_rotmat.append(ar.tolist())
+        action_rot6d.append(a6.tolist())
 
-    df["observation.state"] = state_joint
+    # Joint data is preserved under explicit `*.joint_position` keys.
+    df["observation.state.joint_position"] = state_joint
     df["observation.state.eef_quaternion"] = state_quat
     df["observation.state.eef_rotation_matrix"] = state_rotmat
-    df["action"] = action_joint
+    df["observation.state.eef_rotation_6d"] = state_rot6d
+    df["action.joint_position"] = action_joint
     df["action.eef_quaternion"] = action_quat
     df["action.eef_rotation_matrix"] = action_rotmat
+    df["action.eef_rotation_6d"] = action_rot6d
+    # Canonical `action` / `observation.state` keys are overwritten with rot6d,
+    # so LeRobot policies pick up the 6D rotation representation by default.
+    df["observation.state"] = state_rot6d
+    df["action"] = action_rot6d
 
     df.to_parquet(pq_path, index=False)
 
@@ -216,17 +245,17 @@ def convert_dataset(
         total_frames += convert_parquet(pq_path, fk)
     print(f"  Augmented {total_frames} frames across {len(parquet_files)} files")
 
-    # Update info.json: keep existing action/observation.state entries, add 4 new keys.
+    # Update info.json: canonical action/observation.state become rot6d (10D),
+    # joint data is preserved under *.joint_position keys.
     info_path = dst_dir / "meta" / "info.json"
     with open(info_path) as f:
         info = json.load(f)
 
-    # Joint-space keys keep their original shape (8) but set names explicitly.
-    info["features"]["observation.state"]["shape"] = [8]
-    info["features"]["observation.state"]["names"] = JOINT_NAMES
-    info["features"]["action"]["shape"] = [8]
-    info["features"]["action"]["names"] = JOINT_NAMES
-
+    joint_template = {
+        "dtype": "float32",
+        "shape": [8],
+        "names": JOINT_NAMES,
+    }
     base_template = {
         "dtype": "float32",
         "shape": [8],
@@ -237,24 +266,42 @@ def convert_dataset(
         "shape": [13],
         "names": ROTMAT_NAMES,
     }
+    rot6d_template = {
+        "dtype": "float32",
+        "shape": [10],
+        "names": ROT6D_NAMES,
+    }
+
+    # Canonical keys (read by LeRobot policies) are now rot6d.
+    info["features"]["observation.state"] = dict(rot6d_template)
+    info["features"]["action"] = dict(rot6d_template)
+    # Preserve original joint data under explicit keys.
+    info["features"]["observation.state.joint_position"] = dict(joint_template)
+    info["features"]["action.joint_position"] = dict(joint_template)
     info["features"]["observation.state.eef_quaternion"] = dict(base_template)
     info["features"]["action.eef_quaternion"] = dict(base_template)
     info["features"]["observation.state.eef_rotation_matrix"] = dict(rotmat_template)
     info["features"]["action.eef_rotation_matrix"] = dict(rotmat_template)
+    info["features"]["observation.state.eef_rotation_6d"] = dict(rot6d_template)
+    info["features"]["action.eef_rotation_6d"] = dict(rot6d_template)
 
     with open(info_path, "w") as f:
         json.dump(info, f, indent=2)
     print("  Updated info.json")
 
-    # Recompute stats.json for all 6 keys.
+    # Recompute stats.json for every state/action variant.
     print("  Recomputing stats.json...")
     buckets = {
         "observation.state": [],
+        "observation.state.joint_position": [],
         "observation.state.eef_quaternion": [],
         "observation.state.eef_rotation_matrix": [],
+        "observation.state.eef_rotation_6d": [],
         "action": [],
+        "action.joint_position": [],
         "action.eef_quaternion": [],
         "action.eef_rotation_matrix": [],
+        "action.eef_rotation_6d": [],
     }
     for pq_path in parquet_files:
         df = pd.read_parquet(pq_path)
@@ -296,12 +343,16 @@ def convert_dataset(
         print(f"[4/4] Skipped HF push. Local output: {dst_dir}")
         print(f"\nDone! Local dataset: {dst_dir}")
 
-    print(f"  observation.state                       [8D]:  {JOINT_NAMES}")
+    print(f"  observation.state                      [10D]:  {ROT6D_NAMES}  (canonical, rot6d)")
+    print(f"  observation.state.joint_position        [8D]:  {JOINT_NAMES}")
     print(f"  observation.state.eef_quaternion        [8D]:  {QUAT_NAMES}")
     print(f"  observation.state.eef_rotation_matrix  [13D]:  {ROTMAT_NAMES}")
-    print(f"  action                                  [8D]:  {JOINT_NAMES}")
+    print(f"  observation.state.eef_rotation_6d      [10D]:  {ROT6D_NAMES}")
+    print(f"  action                                 [10D]:  {ROT6D_NAMES}  (canonical, rot6d)")
+    print(f"  action.joint_position                   [8D]:  {JOINT_NAMES}")
     print(f"  action.eef_quaternion                   [8D]:  {QUAT_NAMES}")
     print(f"  action.eef_rotation_matrix             [13D]:  {ROTMAT_NAMES}")
+    print(f"  action.eef_rotation_6d                 [10D]:  {ROT6D_NAMES}")
 
 
 def main():
@@ -317,13 +368,13 @@ def main():
     parser.add_argument(
         "--input-dir",
         type=str,
-        default="/workspace/m.ax/datasets/manufacturing_kitting_dataset_trimmed",
+        default="/workspace/m.ax/datasets/manufacturing_kitting_dataset",
         help="Local source dataset directory (skips HF download)",
     )
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="/workspace/m.ax/datasets/manufacturing_kitting_dataset_trimmed",
+        default="/workspace/m.ax/datasets/manufacturing_kitting_dataset_",
         help="Local output directory (required with --input-dir)",
     )
     parser.add_argument(

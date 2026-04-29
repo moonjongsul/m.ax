@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useSelector } from 'react-redux'
 import { useRosServiceCaller } from '../hooks/useRosServiceCaller'
 
-function PoseRow({ label, poseLocations, target, expressionType, disabled, onResult }) {
+function PoseRow({ label, poseLocations, target, representationType, disabled, onResult }) {
   const { call } = useRosServiceCaller()
   const [busyPoseLocation, setBusyPoseLocation] = useState(null)
 
@@ -12,7 +12,7 @@ function PoseRow({ label, poseLocations, target, expressionType, disabled, onRes
       const res = await call(
         '/control/move_to_pose',
         'max_interfaces/srv/MoveToPose',
-        { target, pose_location: poseLocation, expression_type: expressionType },
+        { target, pose_location: poseLocation, representation_type: representationType },
       )
       onResult?.(res)
     } catch (e) {
@@ -49,7 +49,7 @@ export default function PosePanel() {
   const robotPoseNames = useSelector((s) => s.inference.robotPoseNames)
   const gripperPoseNames = useSelector((s) => s.inference.gripperPoseNames)
   const serverState = useSelector((s) => s.inference.serverState)
-  const expressionType = useSelector((s) => s.inference.form.expressionType) || 'joint'
+  const representationType = useSelector((s) => s.inference.form.representationType) || 'joint'
 
   const disabled = serverState === 'running' || serverState === 'loading'
   const [result, setResult] = useState(null)
@@ -63,14 +63,14 @@ export default function PosePanel() {
         </p>
       )}
       <div className="text-xs text-gray-500">
-        Publish via {expressionType === 'joint' ? 'joint_state' : 'goal_pose (quat)'}
+        Publish via {representationType === 'joint' ? 'joint_state' : 'goal_pose (quat)'}
       </div>
 
       <PoseRow
         label="Robot"
         poseLocations={robotPoseNames}
         target="robot"
-        expressionType={expressionType}
+        representationType={representationType}
         disabled={disabled}
         onResult={setResult}
       />
@@ -78,7 +78,7 @@ export default function PosePanel() {
         label="Gripper"
         poseLocations={gripperPoseNames}
         target="gripper"
-        expressionType={expressionType}
+        representationType={representationType}
         disabled={disabled}
         onResult={setResult}
       />

@@ -3,7 +3,7 @@
 - Action   /inference/load_policy : load a policy (framework, policy, checkpoint, device, dtype)
 - Service  /inference/unload_policy : unload the current policy
 - Service  /control/move_to_pose : publish a preset pose
-- Action   /inference/run          : start/stop inference loop (task_instruction, expression_type)
+- Action   /inference/run          : start/stop inference loop (task_instruction, representation_type)
 - Topic    /inference/status       : periodic status broadcast (1Hz)
 - Topic    /control/robot_state_package : periodic robot/gripper telemetry (30Hz)
 """
@@ -77,11 +77,11 @@ class MaxServerNode(Node):
             "task_instruction": str(
                 self._get_param("inference.default_task_instruction", "")
             ),
-            "expression_type": str(
-                self._get_param("inference.default_expression_type", "joint")
+            "representation_type": str(
+                self._get_param("inference.default_representation_type", "joint")
             ),
         }
-        self._default_expression_type = self._defaults["expression_type"]
+        self._default_representation_type = self._defaults["representation_type"]
 
         # Preset poses: {name: [float, ...]} keyed by pose name.
         self._robot_poses: dict[str, list[float]] = self._load_poses("robot.pose")
@@ -97,7 +97,7 @@ class MaxServerNode(Node):
         self._state_detail = ""
 
         self._task_instruction = ""
-        self._expression_type = self._default_expression_type
+        self._representation_type = self._default_representation_type
         self._step = 0
         self._last_action: np.ndarray | None = None
 
@@ -246,7 +246,7 @@ class MaxServerNode(Node):
         msg.device = self.inference_manager.device or ""
         msg.dtype = self.inference_manager.dtype or ""
         msg.task_instruction = self._task_instruction
-        msg.expression_type = self._expression_type
+        msg.representation_type = self._representation_type
         msg.step = int(self._step)
 
         # Defaults from YAML config (for web UI form initialization)
@@ -256,7 +256,7 @@ class MaxServerNode(Node):
         msg.default_device = self._defaults["device"]
         msg.default_dtype = self._defaults["dtype"]
         msg.default_task_instruction = self._defaults["task_instruction"]
-        msg.default_expression_type = self._defaults["expression_type"]
+        msg.default_representation_type = self._defaults["representation_type"]
 
         # Preset pose names (order preserved from parameter name sort)
         msg.robot_pose_names = list(self._robot_poses.keys())
@@ -438,8 +438,8 @@ class MaxServerNode(Node):
                 )
                 return response
 
-            expression_type = (request.expression_type or "").strip().lower()
-            if expression_type == "joint":
+            representation_type = (request.representation_type or "").strip().lower()
+            if representation_type == "joint":
                 msg, err = self._build_joint_state_msg(pose)
                 if err:
                     response.success = False
@@ -450,7 +450,7 @@ class MaxServerNode(Node):
                 response.message = f"Published joint_state for '{pose_location}'"
                 return response
 
-            if expression_type in ("quat", "rot6d"):
+            if representation_type in ("quat", "rot6d"):
                 msg, err = self._build_goal_pose_msg(pose)
                 self.get_logger().info(f"{msg}")
                 if err:
@@ -464,7 +464,7 @@ class MaxServerNode(Node):
                 return response
 
             response.success = False
-            response.message = f"Unsupported expression_type '{request.expression_type}'"
+            response.message = f"Unsupported representation_type '{request.representation_type}'"
             return response
 
         if target == MoveToPose.Request.TARGET_GRIPPER:
@@ -548,7 +548,7 @@ class MaxServerNode(Node):
 
         # START
         self._task_instruction = goal.task_instruction
-        self._expression_type = goal.expression_type or self._expression_type
+        self._representation_type = goal.representation_type or self._representation_type
         self._step = 0
         self._last_action = None
         self.inference_manager.reset()
@@ -606,7 +606,7 @@ class MaxServerNode(Node):
 
     def _tick(self) -> str | None:
         """One inference step. Returns error message on failure, None on success/skip."""
-        obs = self.communicator.get_latest_observation(expression_type=self._expression_type)
+        obs = self.communicator.get_latest_observation(representation_type=self._representation_type)
         if obs is None:
             return None  # skip this tick, wait for data
         
@@ -617,7 +617,7 @@ class MaxServerNode(Node):
                 images=obs["images"],
                 state=state,
                 task_instruction=self._task_instruction,
-                expression_type=self._expression_type,
+                representation_type=self._representation_type,
             )
             
         except Exception as e:
@@ -633,7 +633,7 @@ class MaxServerNode(Node):
         return None
 
     def _publish_action(self, action: np.ndarray):
-        """Publish action: robot command per expression_type + gripper command (last dim).
+        """Publish action: robot command per representation_type + gripper command (last dim).
 
         action layout (inference_manager always returns in the "quat" form for
         the Cartesian case, gripper in the last slot):
@@ -643,22 +643,22 @@ class MaxServerNode(Node):
         """
         action_robot = action[:-1]
         action_gripper = action[-1]
-        expr = self._expression_type
+        repr_type = self._representation_type
 
-        if expr == "joint":
+        if repr_type == "joint":
             msg_robot, err = self._build_joint_state_msg(list(action_robot))
             if err:
                 self.get_logger().error(f"[max_server] joint action msg error: {err}")
             else:
                 self.communicator.publish_joint_command(msg_robot)
-        elif expr in ("quat", "rot6d"):
+        elif repr_type in ("quat", "rot6d"):
             msg_robot, err = self._build_goal_pose_msg(list(action_robot))
             if err:
-                self.get_logger().error(f"[max_server] {expr} action msg error: {err}")
+                self.get_logger().error(f"[max_server] {repr_type} action msg error: {err}")
             else:
                 self.communicator.publish_goal_pose(msg_robot)
         else:
-            self.get_logger().error(f"[max_server] unsupported expression_type '{expr}'")
+            self.get_logger().error(f"[max_server] unsupported representation_type '{repr_type}'")
             return
 
         msg_gripper = Float32()

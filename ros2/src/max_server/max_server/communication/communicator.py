@@ -241,7 +241,7 @@ class Communicator:
     def camera_names(self) -> list[str]:
         return list(self._camera_names)
 
-    def get_latest_observation(self, expression_type: str) -> dict | None:
+    def get_latest_observation(self, representation_type: str) -> dict | None:
         """Return dict of observations if all required inputs are present, else None."""
         with self._lock:
             if self._latest_gripper_state is None:
@@ -249,11 +249,11 @@ class Communicator:
             if len(self._latest_images) < len(self._camera_names):
                 return None
             
-            if expression_type == "joint":
+            if representation_type == "joint":
                 if self._latest_joint_state is None:
                     return None
                 robot_data = list(self._latest_joint_state.position)
-            elif expression_type in ("quat", "rot6d"):
+            elif representation_type in ("quat", "rot6d"):
                 if self._latest_current_pose is None:
                     return None
                 p = self._latest_current_pose.pose.position

@@ -2,7 +2,7 @@ model:
   type: 'vla'
   policy_list: ['pi0.5', 'smolvla']
   policy: 'smolvla'          # pi0.5 | smolvla
-  expression_type: 'rot6d'    # joint | quat | rot6d
+  representation_type: 'rot6d'    # joint | quat | rot6d
   #checkpoint: '/workspace/m.ax/checkpoints/a6000_260416/pi05_kitting_scratch_a6000_b16_260413/checkpoints/034000/pretrained_model'
   checkpoint: '/workspace/m.ax/checkpoints/local_260410/smolvla_kitting_scratch_b32/checkpoints/082000/pretrained_model'
   task_prompt: 'pick part and flip part'

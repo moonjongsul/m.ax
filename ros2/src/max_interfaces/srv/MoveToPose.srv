@@ -3,7 +3,7 @@ string TARGET_GRIPPER=gripper
 
 string target        # "robot" or "gripper"
 string pose_location     # preset name defined in YAML (e.g., "home", "kit", "open", "close")
-string expression_type   # "joint" | "quat" | "rot6d"  (ignored for gripper)
+string representation_type   # "joint" | "quat" | "rot6d"  (ignored for gripper)
 ---
 bool success
 string message

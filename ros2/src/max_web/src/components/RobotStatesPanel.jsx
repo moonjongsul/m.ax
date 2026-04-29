@@ -28,7 +28,7 @@ function NumericSection() {
   const hasJoints = t.jointPositions.length > 0
 
   // "Command" column mirrors whichever action the server is currently
-  // publishing: joint for expression_type=joint, pose (xyz+quat) for quat/rot6d.
+  // publishing: joint for representation_type=joint, pose (xyz+quat) for quat/rot6d.
   // The server sets exactly one of these valid flags per tick, so we pick
   // whichever is live.
   const cmdMode =

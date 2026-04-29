@@ -9,7 +9,7 @@ const STATE_COLORS = {
 }
 
 export default function InferenceStatus() {
-  const { serverState, detail, policy, taskInstruction, expressionType, step, lastAction } =
+  const { serverState, detail, policy, taskInstruction, representationType, step, lastAction } =
     useSelector((s) => s.inference)
 
   const dotClass = STATE_COLORS[serverState] || 'bg-gray-400'
@@ -28,7 +28,7 @@ export default function InferenceStatus() {
         <div className="break-all"><span className="text-gray-500">Checkpoint:</span> {policy.checkpoint || '—'}</div>
         <div><span className="text-gray-500">Device / dtype:</span> {policy.device || '—'} / {policy.dtype || '—'}</div>
         <div><span className="text-gray-500">Task:</span> {taskInstruction || '—'}</div>
-        <div><span className="text-gray-500">Expression:</span> {expressionType || '—'}</div>
+        <div><span className="text-gray-500">Representation:</span> {representationType || '—'}</div>
         <div><span className="text-gray-500">Step:</span> {step}</div>
         {lastAction.length > 0 && (
           <div className="break-all">

@@ -6,7 +6,7 @@ max_server:
       default_framework: lerobot
       default_policy: smolvla
       default_dtype: bfloat16
-      default_expression_type: rot6d
+      default_representation_type: rot6d
       default_checkpoint: /workspace/m.ax/checkpoints/smolvla_kitting_rot6d_b24/checkpoints/042000/pretrained_model
       default_task_instruction: "flip part"
       default_device: cuda

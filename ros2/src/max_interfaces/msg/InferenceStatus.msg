@@ -17,7 +17,7 @@ string dtype
 
 # Current running task (populated when state is running)
 string task_instruction
-string expression_type
+string representation_type
 uint32 step
 
 # Default values sourced from the server's YAML config.
@@ -28,7 +28,7 @@ string default_checkpoint
 string default_device
 string default_dtype
 string default_task_instruction
-string default_expression_type
+string default_representation_type
 
 # Preset pose names defined in the YAML config (order preserved).
 # The web UI renders one button per name.

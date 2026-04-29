@@ -124,12 +124,12 @@ class InferenceManager:
         images: dict[str, np.ndarray],
         state: np.ndarray,
         task_instruction: str,
-        expression_type: str,
+        representation_type: str,
     ) -> np.ndarray:
         if self.policy is None:
             raise RuntimeError("Policy not loaded")
 
-        if expression_type == "rot6d":
+        if representation_type == "rot6d":
             if len(state) != 8:
                 raise ValueError(
                     f"rot6d expects 8-vec state (xyz+quat+gripper), got {len(state)}"
@@ -156,7 +156,7 @@ class InferenceManager:
         while result.ndim > 1:
             result = result[0]
 
-        if expression_type == "rot6d":
+        if representation_type == "rot6d":
             if len(result) != 10:
                 raise ValueError(
                     f"rot6d action expected 10-vec (xyz+rot6d+gripper), got {len(result)}"

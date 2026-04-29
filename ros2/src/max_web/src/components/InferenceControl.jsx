@@ -21,7 +21,7 @@ export default function InferenceControl() {
       {
         command: COMMAND_START,
         task_instruction: form.taskInstruction,
-        expression_type: form.expressionType,
+        representation_type: form.representationType,
       },
       {
         onFeedback: (fb) => dispatch(setFeedback(fb)),
@@ -52,11 +52,11 @@ export default function InferenceControl() {
       </label>
 
       <label className="block text-sm">
-        <span className="text-gray-600">Expression type</span>
+        <span className="text-gray-600">Representation type</span>
         <select
           className="mt-1 block w-full rounded border border-gray-300 px-2 py-1 disabled:bg-gray-100"
-          value={form.expressionType}
-          onChange={(e) => dispatch(setFormField({ key: 'expressionType', value: e.target.value }))}
+          value={form.representationType}
+          onChange={(e) => dispatch(setFormField({ key: 'representationType', value: e.target.value }))}
           disabled={!canStart}
         >
           <option value="joint">joint</option>

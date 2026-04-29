@@ -3,7 +3,7 @@ uint8 COMMAND_STOP=1
 
 uint8 command
 string task_instruction
-string expression_type
+string representation_type
 ---
 bool success
 string message

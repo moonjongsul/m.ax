@@ -16,7 +16,7 @@ const initialState = {
 
   // currently running task
   taskInstruction: '',
-  expressionType: '',
+  representationType: '',
   step: 0,
   lastAction: [],
 
@@ -29,7 +29,7 @@ const initialState = {
     device: '',
     dtype: '',
     taskInstruction: '',
-    expressionType: '',
+    representationType: '',
   },
   formInitialized: false,
 
@@ -54,7 +54,7 @@ const inferenceSlice = createSlice({
         dtype: s.dtype || '',
       }
       state.taskInstruction = s.task_instruction || ''
-      state.expressionType = s.expression_type || ''
+      state.representationType = s.representation_type || ''
       state.step = s.step || 0
 
       state.robotPoseNames = s.robot_pose_names || []
@@ -65,7 +65,7 @@ const inferenceSlice = createSlice({
         const hasAnyDefault =
           s.default_framework || s.default_policy || s.default_checkpoint ||
           s.default_device || s.default_dtype ||
-          s.default_task_instruction || s.default_expression_type
+          s.default_task_instruction || s.default_representation_type
         if (hasAnyDefault) {
           state.form = {
             framework: s.default_framework || '',
@@ -74,7 +74,7 @@ const inferenceSlice = createSlice({
             device: s.default_device || '',
             dtype: s.default_dtype || '',
             taskInstruction: s.default_task_instruction || '',
-            expressionType: s.default_expression_type || '',
+            representationType: s.default_representation_type || '',
           }
           state.formInitialized = true
         }
