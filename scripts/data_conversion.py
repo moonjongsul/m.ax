@@ -1,18 +1,23 @@
 """
-Convert joint-space LeRobot dataset to EEF task-space representations.
+Augment a joint-space LeRobot dataset with EEF task-space representations.
 
-Generates two new branches from the original joint-space dataset:
-  - eef_quat:  position(3) + quaternion(4) + gripper(1) = 8D
-  - eef_rot6d: position(3) + rot6d(6) + gripper(1) = 10D
+Adds the following keys to each frame (joint-space `action` / `observation.state`
+are kept as-is):
+
+  - action                          : [j1..j7, gripper]                       (8D)
+  - action.eef_quaternion           : [x, y, z, qx, qy, qz, qw, gripper]      (8D)
+  - action.eef_rotation_matrix      : [x, y, z, r11..r33, gripper]            (13D)
+  - observation.state                          : [j1..j7, gripper]            (8D)
+  - observation.state.eef_quaternion           : [x, y, z, qx, qy, qz, qw, gripper]     (8D)
+  - observation.state.eef_rotation_matrix      : [x, y, z, r11..r33, gripper] (13D)
 
 FK is computed via pinocchio using the FR3 URDF.
 Gripper action is binarized: >= 0.8 -> 1.0, < 0.8 -> 0.0
 Gripper state is kept as-is.
+Rotation matrix is row-major flattened (numpy default): [r11, r12, r13, r21, r22, r23, r31, r32, r33].
 
 Usage:
-    python gt_kitting/data_conversion.py --repo-id moonjongsul/manufacturing_kitting_dataset
-    python gt_kitting/data_conversion.py --repo-id moonjongsul/manufacturing_kitting_dataset --mode eef_quat
-    python gt_kitting/data_conversion.py --repo-id moonjongsul/manufacturing_kitting_dataset --mode eef_rot6d
+    python scripts/data_conversion.py --repo-id moonjongsul/manufacturing_kitting_dataset
 """
 
 import argparse
@@ -30,6 +35,18 @@ from tqdm import tqdm
 URDF_PATH = Path(__file__).parent / "fr3.urdf"
 TCP_FRAME = "fr3_link8"
 GRIPPER_THRESHOLD = 0.8
+
+OUTPUT_BRANCH = "eef_augmented"
+
+JOINT_NAMES = ["j1", "j2", "j3", "j4", "j5", "j6", "j7", "gripper_width"]
+QUAT_NAMES = ["x", "y", "z", "qx", "qy", "qz", "qw", "gripper_width"]
+ROTMAT_NAMES = [
+    "x", "y", "z",
+    "r11", "r12", "r13",
+    "r21", "r22", "r23",
+    "r31", "r32", "r33",
+    "gripper_width",
+]
 
 
 class FR3Kinematics:
@@ -58,230 +75,273 @@ class FR3Kinematics:
         return pose.translation.copy(), pose.rotation.copy()
 
 
-def rotation_matrix_to_quaternion(R: np.ndarray) -> np.ndarray:
-    """Convert 3x3 rotation matrix to quaternion (x, y, z, w)."""
-    return Rotation.from_matrix(R).as_quat()
-
-
-def rotation_matrix_to_rot6d(R: np.ndarray) -> np.ndarray:
-    """Convert 3x3 rotation matrix to 6D representation (first two columns)."""
-    return np.concatenate([R[:, 0], R[:, 1]])
-
-
 def binarize_gripper(gripper_value: float) -> float:
     """Binarize gripper action: >= 0.8 -> 1.0, < 0.8 -> 0.0"""
     return 1.0 if gripper_value >= GRIPPER_THRESHOLD else 0.0
 
 
-def convert_joint_to_eef(
+def joint_to_eef_representations(
     joint_positions_rad: np.ndarray,
     gripper: float,
     fk: FR3Kinematics,
-    mode: str,
-    is_action: bool = False,
-) -> np.ndarray:
+    is_action: bool,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Convert joint-space data to EEF task-space.
-
-    Args:
-        joint_positions_rad: (7,) joint angles in radians
-        gripper: gripper value
-        fk: FK solver
-        mode: 'eef_quat' or 'eef_rot6d'
-        is_action: if True, binarize gripper
+    Compute joint / eef_quaternion / eef_rotation_matrix vectors from one frame.
 
     Returns:
-        eef_quat:  (8,)  [x, y, z, qx, qy, qz, qw, gripper]
-        eef_rot6d: (10,) [x, y, z, r1, r2, r3, r4, r5, r6, gripper]
+        joint     : (8,)  [j1..j7, gripper]
+        eef_quat  : (8,)  [x, y, z, qx, qy, qz, qw, gripper]
+        eef_rotmat: (13,) [x, y, z, r11..r33 (row-major), gripper]
     """
     pos, rot = fk.forward(joint_positions_rad)
 
-    if is_action:
-        gripper = binarize_gripper(gripper)
+    g = binarize_gripper(gripper) if is_action else gripper
 
-    if mode == "eef_quat":
-        quat = rotation_matrix_to_quaternion(rot)
-        return np.concatenate([pos, quat, [gripper]]).astype(np.float32)
-    elif mode == "eef_rot6d":
-        rot6d = rotation_matrix_to_rot6d(rot)
-        return np.concatenate([pos, rot6d, [gripper]]).astype(np.float32)
-    else:
-        raise ValueError(f"Unknown mode: {mode}")
+    joint_vec = np.concatenate([joint_positions_rad[:7], [g]]).astype(np.float32)
 
+    quat = Rotation.from_matrix(rot).as_quat()  # (x, y, z, w)
+    eef_quat = np.concatenate([pos, quat, [g]]).astype(np.float32)
 
-def get_feature_info(mode: str) -> tuple[int, dict]:
-    """Get output dimension and feature names for the target mode."""
-    if mode == "eef_quat":
-        dim = 8
-        names = {
-            "observation.state": ["x", "y", "z", "qx", "qy", "qz", "qw", "gripper_width"],
-            "action": ["x", "y", "z", "qx", "qy", "qz", "qw", "gripper"],
-        }
-    elif mode == "eef_rot6d":
-        dim = 10
-        names = {
-            "observation.state": ["x", "y", "z", "r1", "r2", "r3", "r4", "r5", "r6", "gripper_width"],
-            "action": ["x", "y", "z", "r1", "r2", "r3", "r4", "r5", "r6", "gripper"],
-        }
-    else:
-        raise ValueError(f"Unknown mode: {mode}")
-    return dim, names
+    eef_rotmat = np.concatenate([pos, rot.flatten(), [g]]).astype(np.float32)
+
+    return joint_vec, eef_quat, eef_rotmat
 
 
-def convert_parquet(pq_path: Path, fk: FR3Kinematics, mode: str) -> int:
-    """Convert a single parquet file in-place. Returns number of frames processed."""
+def convert_parquet(pq_path: Path, fk: FR3Kinematics) -> int:
+    """Augment a single parquet file in-place with EEF representations.
+
+    Returns number of frames processed.
+    """
     df = pd.read_parquet(pq_path)
 
     states = np.array(df["observation.state"].tolist())
     actions = np.array(df["action"].tolist())
 
-    new_states = []
-    new_actions = []
+    state_joint, state_quat, state_rotmat = [], [], []
+    action_joint, action_quat, action_rotmat = [], [], []
 
     for i in range(len(df)):
-        eef_state = convert_joint_to_eef(states[i, :7], float(states[i, 7]), fk, mode, is_action=False)
-        eef_action = convert_joint_to_eef(actions[i, :7], float(actions[i, 7]), fk, mode, is_action=True)
-        new_states.append(eef_state.tolist())
-        new_actions.append(eef_action.tolist())
+        sj, sq, sr = joint_to_eef_representations(
+            states[i, :7], float(states[i, 7]), fk, is_action=False
+        )
+        aj, aq, ar = joint_to_eef_representations(
+            actions[i, :7], float(actions[i, 7]), fk, is_action=True
+        )
+        state_joint.append(sj.tolist())
+        state_quat.append(sq.tolist())
+        state_rotmat.append(sr.tolist())
+        action_joint.append(aj.tolist())
+        action_quat.append(aq.tolist())
+        action_rotmat.append(ar.tolist())
 
-    df["observation.state"] = new_states
-    df["action"] = new_actions
+    df["observation.state"] = state_joint
+    df["observation.state.eef_quaternion"] = state_quat
+    df["observation.state.eef_rotation_matrix"] = state_rotmat
+    df["action"] = action_joint
+    df["action.eef_quaternion"] = action_quat
+    df["action.eef_rotation_matrix"] = action_rotmat
+
     df.to_parquet(pq_path, index=False)
 
     return len(df)
 
 
-def convert_dataset(repo_id: str, mode: str, output_dir: str | None = None):
-    """
-    Download dataset, convert parquet data to EEF space, update metadata,
-    and push to a new HuggingFace branch. Videos are unchanged.
-    """
-    if output_dir is None:
-        output_root = Path(f"/tmp/lerobot_conversion/{repo_id.replace('/', '_')}_{mode}")
-    else:
-        output_root = Path(output_dir) / mode
+def _compute_stats(arr: np.ndarray) -> dict:
+    return {
+        "mean": arr.mean(axis=0).tolist(),
+        "std": arr.std(axis=0).tolist(),
+        "min": arr.min(axis=0).tolist(),
+        "max": arr.max(axis=0).tolist(),
+    }
 
-    # Step 1: Download source
-    print(f"[1/4] Downloading source dataset: {repo_id} (main branch)")
-    src_dir = Path(snapshot_download(
-        repo_id=repo_id,
-        repo_type="dataset",
-        revision="main",
-    ))
-    print(f"  Source: {src_dir}")
+
+def convert_dataset(
+    repo_id: str | None = None,
+    output_dir: str | None = None,
+    input_dir: str | None = None,
+    push: bool = True,
+):
+    """
+    Augment a LeRobot dataset with EEF keys (quaternion + rotation matrix).
+
+    Source can be either:
+      - a HuggingFace repo (`repo_id`), or
+      - a local directory (`input_dir`).
+
+    Output is written to `output_dir` (when given), otherwise a /tmp working dir.
+    Pushes to HuggingFace branch `eef_augmented` only when `push=True` and
+    `repo_id` is provided.
+    """
+    if input_dir is not None:
+        # Local mode
+        src_dir = Path(input_dir)
+        if not src_dir.exists():
+            raise FileNotFoundError(f"Input dir not found: {src_dir}")
+        print(f"[1/4] Local source dataset: {src_dir}")
+
+        if output_dir is None:
+            raise ValueError("--output-dir is required when --input-dir is set")
+        dst_dir = Path(output_dir)
+    else:
+        # HuggingFace mode
+        if repo_id is None:
+            raise ValueError("Either --repo-id or --input-dir must be provided")
+        print(f"[1/4] Downloading source dataset: {repo_id} (main branch)")
+        src_dir = Path(snapshot_download(
+            repo_id=repo_id,
+            repo_type="dataset",
+            revision="main",
+        ))
+        print(f"  Source: {src_dir}")
+
+        if output_dir is None:
+            dst_dir = Path(f"/tmp/lerobot_conversion/{repo_id.replace('/', '_')}_{OUTPUT_BRANCH}") / "dataset"
+        else:
+            dst_dir = Path(output_dir)
 
     # Step 2: Copy to working directory
-    dst_dir = output_root / "dataset"
     if dst_dir.exists():
         shutil.rmtree(dst_dir)
     shutil.copytree(src_dir, dst_dir, ignore=shutil.ignore_patterns(".git*"))
     print(f"[2/4] Working copy: {dst_dir}")
 
-    # Step 3: Convert parquet files
-    print(f"[3/4] Converting parquet data to {mode}...")
+    # Step 3: Augment parquet files
+    print("[3/4] Augmenting parquet data with EEF representations...")
     fk = FR3Kinematics()
-    dim, feature_names = get_feature_info(mode)
 
     parquet_files = sorted(dst_dir.glob("data/**/*.parquet"))
     total_frames = 0
     for pq_path in tqdm(parquet_files, desc="Converting"):
-        total_frames += convert_parquet(pq_path, fk, mode)
-    print(f"  Converted {total_frames} frames across {len(parquet_files)} files")
+        total_frames += convert_parquet(pq_path, fk)
+    print(f"  Augmented {total_frames} frames across {len(parquet_files)} files")
 
-    # Update info.json
+    # Update info.json: keep existing action/observation.state entries, add 4 new keys.
     info_path = dst_dir / "meta" / "info.json"
     with open(info_path) as f:
         info = json.load(f)
 
-    info["features"]["observation.state"]["shape"] = [dim]
-    info["features"]["observation.state"]["names"] = feature_names["observation.state"]
-    info["features"]["action"]["shape"] = [dim]
-    info["features"]["action"]["names"] = feature_names["action"]
+    # Joint-space keys keep their original shape (8) but set names explicitly.
+    info["features"]["observation.state"]["shape"] = [8]
+    info["features"]["observation.state"]["names"] = JOINT_NAMES
+    info["features"]["action"]["shape"] = [8]
+    info["features"]["action"]["names"] = JOINT_NAMES
+
+    base_template = {
+        "dtype": "float32",
+        "shape": [8],
+        "names": QUAT_NAMES,
+    }
+    rotmat_template = {
+        "dtype": "float32",
+        "shape": [13],
+        "names": ROTMAT_NAMES,
+    }
+    info["features"]["observation.state.eef_quaternion"] = dict(base_template)
+    info["features"]["action.eef_quaternion"] = dict(base_template)
+    info["features"]["observation.state.eef_rotation_matrix"] = dict(rotmat_template)
+    info["features"]["action.eef_rotation_matrix"] = dict(rotmat_template)
 
     with open(info_path, "w") as f:
         json.dump(info, f, indent=2)
     print("  Updated info.json")
 
-    # Recompute stats.json with correct dimensions
+    # Recompute stats.json for all 6 keys.
     print("  Recomputing stats.json...")
-    all_states = []
-    all_actions = []
+    buckets = {
+        "observation.state": [],
+        "observation.state.eef_quaternion": [],
+        "observation.state.eef_rotation_matrix": [],
+        "action": [],
+        "action.eef_quaternion": [],
+        "action.eef_rotation_matrix": [],
+    }
     for pq_path in parquet_files:
         df = pd.read_parquet(pq_path)
-        all_states.extend(df["observation.state"].tolist())
-        all_actions.extend(df["action"].tolist())
-
-    states_arr = np.array(all_states, dtype=np.float32)
-    actions_arr = np.array(all_actions, dtype=np.float32)
-
-    def _compute_stats(arr: np.ndarray) -> dict:
-        return {
-            "mean": arr.mean(axis=0).tolist(),
-            "std": arr.std(axis=0).tolist(),
-            "min": arr.min(axis=0).tolist(),
-            "max": arr.max(axis=0).tolist(),
-        }
+        for k in buckets:
+            buckets[k].extend(df[k].tolist())
 
     stats_path = dst_dir / "meta" / "stats.json"
     with open(stats_path) as f:
         stats = json.load(f)
-    stats["observation.state"] = _compute_stats(states_arr)
-    stats["action"] = _compute_stats(actions_arr)
+
+    for k, vals in buckets.items():
+        arr = np.array(vals, dtype=np.float32)
+        stats[k] = _compute_stats(arr)
+
     with open(stats_path, "w") as f:
         json.dump(stats, f, indent=2)
-    print(f"  Updated stats.json (state: {dim}D, action: {dim}D)")
+    print("  Updated stats.json")
 
-    # Step 4: Push to HuggingFace
-    print(f"[4/4] Pushing to HuggingFace branch: {mode}")
-    api = HfApi()
+    # Step 4: Push to HuggingFace (optional)
+    if push and repo_id is not None:
+        print(f"[4/4] Pushing to HuggingFace branch: {OUTPUT_BRANCH}")
+        api = HfApi()
 
-    try:
-        api.create_branch(repo_id=repo_id, branch=mode, repo_type="dataset")
-        print(f"  Created branch: {mode}")
-    except Exception:
-        print(f"  Branch '{mode}' already exists")
+        try:
+            api.create_branch(repo_id=repo_id, branch=OUTPUT_BRANCH, repo_type="dataset")
+            print(f"  Created branch: {OUTPUT_BRANCH}")
+        except Exception:
+            print(f"  Branch '{OUTPUT_BRANCH}' already exists")
 
-    api.upload_folder(
-        folder_path=str(dst_dir),
-        repo_id=repo_id,
-        repo_type="dataset",
-        revision=mode,
-        commit_message=f"Convert joint-space to {mode} via FK (pinocchio)",
-    )
+        api.upload_folder(
+            folder_path=str(dst_dir),
+            repo_id=repo_id,
+            repo_type="dataset",
+            revision=OUTPUT_BRANCH,
+            commit_message="Augment dataset with EEF quaternion / rotation-matrix representations via FK (pinocchio)",
+        )
+        print(f"\nDone! Dataset: {repo_id} (branch: {OUTPUT_BRANCH})")
+    else:
+        print(f"[4/4] Skipped HF push. Local output: {dst_dir}")
+        print(f"\nDone! Local dataset: {dst_dir}")
 
-    print(f"\nDone! Dataset: {repo_id} (branch: {mode})")
-    print(f"  observation.state [{dim}D]: {feature_names['observation.state']}")
-    print(f"  action [{dim}D]: {feature_names['action']}")
+    print(f"  observation.state                       [8D]:  {JOINT_NAMES}")
+    print(f"  observation.state.eef_quaternion        [8D]:  {QUAT_NAMES}")
+    print(f"  observation.state.eef_rotation_matrix  [13D]:  {ROTMAT_NAMES}")
+    print(f"  action                                  [8D]:  {JOINT_NAMES}")
+    print(f"  action.eef_quaternion                   [8D]:  {QUAT_NAMES}")
+    print(f"  action.eef_rotation_matrix             [13D]:  {ROTMAT_NAMES}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Convert joint-space dataset to EEF task-space")
+    parser = argparse.ArgumentParser(
+        description="Augment joint-space dataset with EEF quaternion + rotation-matrix keys"
+    )
     parser.add_argument(
         "--repo-id",
         type=str,
-        required=True,
-        help="HuggingFace dataset repo ID",
+        default=None,
+        help="HuggingFace dataset repo ID (omit when using --input-dir)",
     )
     parser.add_argument(
-        "--mode",
+        "--input-dir",
         type=str,
-        choices=["eef_quat", "eef_rot6d", "both"],
-        default="both",
-        help="Conversion mode (default: both)",
+        default=None,
+        help="Local source dataset directory (skips HF download)",
     )
     parser.add_argument(
         "--output-dir",
         type=str,
         default=None,
-        help="Local output directory",
+        help="Local output directory (required with --input-dir)",
+    )
+    parser.add_argument(
+        "--no-push",
+        action="store_true",
+        help="Skip pushing to HuggingFace (always skipped when --input-dir is set without --repo-id)",
     )
     args = parser.parse_args()
 
-    if args.mode == "both":
-        for m in ["eef_quat", "eef_rot6d"]:
-            convert_dataset(args.repo_id, m, args.output_dir)
-    else:
-        convert_dataset(args.repo_id, args.mode, args.output_dir)
+    if args.repo_id is None and args.input_dir is None:
+        parser.error("either --repo-id or --input-dir must be provided")
+
+    convert_dataset(
+        repo_id=args.repo_id,
+        output_dir=args.output_dir,
+        input_dir=args.input_dir,
+        push=not args.no_push,
+    )
 
 
 if __name__ == "__main__":

@@ -1,7 +1,17 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python3 -m py_compile max_server/max_server/utils/config_loader.py max_server/max_server/communication/communicator.py max_server/max_server/inference/inference_manager.py max_server/max_server/task_manager/task_manager.py max_server/max_server/task_planner/task_planner.py max_server/max_server/max_server_node.py)"
+      "Bash(python3 -m py_compile max_server/max_server/utils/config_loader.py max_server/max_server/communication/communicator.py max_server/max_server/inference/inference_manager.py max_server/max_server/task_manager/task_manager.py max_server/max_server/task_planner/task_planner.py max_server/max_server/max_server_node.py)",
+      "Bash(python3 -c \"import pyarrow.parquet as pq; t = pq.read_table\\('/workspace/m.ax/datasets/manufacturing_kitting_dataset/meta/episodes/chunk-000/' + __import__\\('os'\\).listdir\\('/workspace/m.ax/datasets/manufacturing_kitting_dataset/meta/episodes/chunk-000/'\\)[0]\\); print\\('schema:'\\); print\\(t.schema\\); print\\('rows:', t.num_rows\\); print\\('first row:'\\); print\\({k: t.column\\(k\\)[0].as_py\\(\\) for k in t.column_names}\\)\")",
+      "Bash(python3 -c \"import lerobot; print\\('lerobot:', lerobot.__version__\\)\")",
+      "Bash(python3 -c \"import fastapi; print\\('fastapi:', fastapi.__version__\\)\")",
+      "Bash(python3 -c \"import pyarrow; print\\('pyarrow:', pyarrow.__version__\\)\")",
+      "Bash(pip install *)",
+      "Read(//tmp/**)",
+      "Bash(npm run *)"
+    ],
+    "additionalDirectories": [
+      "/workspace/m.ax/ros2/src/max_web/backend"
     ]
   }
 }

@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { useSelector } from 'react-redux'
 import { useRosConnection } from './hooks/useRosConnection'
 import InferencePage from './pages/InferencePage'
+import LeRobotEditorPage from './pages/LeRobotEditorPage'
 
-function ConnectionBar() {
+function ConnectionBar({ page, setPage }) {
   const { host, connected, connecting, error } = useSelector((s) => s.ros)
   const dotClass = connected ? 'bg-green-500' : connecting ? 'bg-yellow-400' : 'bg-red-500'
   return (
@@ -12,17 +14,37 @@ function ConnectionBar() {
       <span>{connected ? 'connected' : connecting ? 'connecting…' : 'disconnected'}</span>
       <span className="text-gray-400">@ {host}:9090</span>
       {error && <span className="text-red-400 ml-4">{error}</span>}
+      <nav className="ml-auto flex gap-1">
+        <PageTab name="inference" label="Inference" page={page} setPage={setPage} />
+        <PageTab name="lerobot" label="LeRobot Editor" page={page} setPage={setPage} />
+      </nav>
     </header>
+  )
+}
+
+function PageTab({ name, label, page, setPage }) {
+  const active = page === name
+  return (
+    <button
+      onClick={() => setPage(name)}
+      className={`px-3 py-1 rounded text-sm transition
+                  ${active ? 'bg-gray-100 text-gray-900'
+                           : 'text-gray-300 hover:bg-gray-800'}`}
+    >
+      {label}
+    </button>
   )
 }
 
 export default function App() {
   useRosConnection()
+  const [page, setPage] = useState('inference')
   return (
     <div className="min-h-full flex flex-col">
-      <ConnectionBar />
+      <ConnectionBar page={page} setPage={setPage} />
       <main className="flex-1">
-        <InferencePage />
+        {page === 'inference' && <InferencePage />}
+        {page === 'lerobot' && <LeRobotEditorPage />}
       </main>
     </div>
   )

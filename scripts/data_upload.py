@@ -26,9 +26,9 @@ from huggingface_hub import HfApi, whoami
 
 def main():
     parser = argparse.ArgumentParser(description="LeRobot 데이터셋 HuggingFace 업로드")
-    parser.add_argument("--dataset-dir", default=Path("/workspace/m.ax/datasets/manufacturing_kitting_dataset"), 
+    parser.add_argument("--dataset-dir", default=Path("/workspace/m.ax/datasets/manufacturing_kitting_dataset_flip_object"), 
                         type=Path, help="로컬 LeRobot 데이터셋 경로")
-    parser.add_argument("--repo-id", default="moonjongsul/manufacturing_kitting_dataset",
+    parser.add_argument("--repo-id", default="moonjongsul/manufacturing_kitting_dataset_flip_object",
                         type=str, help="HuggingFace repo ID (예: moonjongsul/my_dataset)")
     parser.add_argument("--private", default=False, action="store_true",
                         help="비공개 레포지토리로 업로드")
