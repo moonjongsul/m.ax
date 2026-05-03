@@ -7,8 +7,8 @@ max_server:
       default_policy: smolvla
       default_dtype: bfloat16
       default_representation_type: rot6d
-      default_checkpoint: /workspace/m.ax/checkpoints/smolvla_kitting_rot6d_b24/checkpoints/042000/pretrained_model
-      default_task_instruction: "flip part"
+      default_checkpoint: /workspace/m.ax/checkpoints/manufacturing_kitting_smolvla_rot6d_260430_v2/176000
+      default_task_instruction: "kit part"
       default_device: cuda
       ros_domain_id: 0
       observation_list:

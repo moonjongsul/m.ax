@@ -547,6 +547,7 @@ class MaxServerNode(Node):
             return result
 
         # START
+        self.get_logger().info(f"INSTRUCTION: {goal.task_instruction}")
         self._task_instruction = goal.task_instruction
         self._representation_type = goal.representation_type or self._representation_type
         self._step = 0
