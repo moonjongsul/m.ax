@@ -28,6 +28,9 @@ HF_USER = "moonjongsul"
 
 UPLOAD = []
 UPLOAD.append("manufacturing_kitting_dataset")
+UPLOAD.append("manufacturing_kitting_dataset_flip_object")
+UPLOAD.append("manufacturing_kitting_dataset_kit_object")
+
 
 """
 for db_name in UPLOAD:
@@ -76,6 +79,13 @@ def main(dataset_dir=None, repo_id=None, private=False):
         folder_path=str(dataset_dir),
         repo_id=repo_id,
         repo_type="dataset",
+    )
+    
+    print(f"태깅 ")
+    api.create_tag(
+        repo_id=repo_id,
+        repo_type="dataset",
+        tag="v3.0",
     )
 
     print(f"\n✅ 업로드 완료!")

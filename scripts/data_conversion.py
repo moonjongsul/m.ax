@@ -34,6 +34,7 @@ Usage:
 import argparse
 import json
 import shutil
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -43,11 +44,11 @@ from huggingface_hub import HfApi, snapshot_download
 from scipy.spatial.transform import Rotation
 from tqdm import tqdm
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "thirdparty" / "lerobot" / "src"))
+
 URDF_PATH = Path(__file__).parent / "fr3.urdf"
 TCP_FRAME = "fr3_link8"
 GRIPPER_THRESHOLD = 0.8
-
-OUTPUT_BRANCH = "eef_augmented"
 
 JOINT_NAMES = ["j1", "j2", "j3", "j4", "j5", "j6", "j7", "gripper_width"]
 QUAT_NAMES = ["x", "y", "z", "qx", "qy", "qz", "qw", "gripper_width"]
@@ -176,15 +177,6 @@ def convert_parquet(pq_path: Path, fk: FR3Kinematics) -> int:
     return len(df)
 
 
-def _compute_stats(arr: np.ndarray) -> dict:
-    return {
-        "mean": arr.mean(axis=0).tolist(),
-        "std": arr.std(axis=0).tolist(),
-        "min": arr.min(axis=0).tolist(),
-        "max": arr.max(axis=0).tolist(),
-    }
-
-
 def convert_dataset(
     repo_id: str | None = None,
     output_dir: str | None = None,
@@ -225,7 +217,7 @@ def convert_dataset(
         print(f"  Source: {src_dir}")
 
         if output_dir is None:
-            dst_dir = Path(f"/tmp/lerobot_conversion/{repo_id.replace('/', '_')}_{OUTPUT_BRANCH}") / "dataset"
+            dst_dir = Path(f"/tmp/lerobot_conversion/{repo_id.replace('/', '_')}") / "dataset"
         else:
             dst_dir = Path(output_dir)
 
@@ -289,56 +281,31 @@ def convert_dataset(
         json.dump(info, f, indent=2)
     print("  Updated info.json")
 
-    # Recompute stats.json for every state/action variant.
-    print("  Recomputing stats.json...")
-    buckets = {
-        "observation.state": [],
-        "observation.state.joint_position": [],
-        "observation.state.eef_quaternion": [],
-        "observation.state.eef_rotation_matrix": [],
-        "observation.state.eef_rotation_6d": [],
-        "action": [],
-        "action.joint_position": [],
-        "action.eef_quaternion": [],
-        "action.eef_rotation_matrix": [],
-        "action.eef_rotation_6d": [],
-    }
-    for pq_path in parquet_files:
-        df = pd.read_parquet(pq_path)
-        for k in buckets:
-            buckets[k].extend(df[k].tolist())
-
-    stats_path = dst_dir / "meta" / "stats.json"
-    with open(stats_path) as f:
-        stats = json.load(f)
-
-    for k, vals in buckets.items():
-        arr = np.array(vals, dtype=np.float32)
-        stats[k] = _compute_stats(arr)
-
-    with open(stats_path, "w") as f:
-        json.dump(stats, f, indent=2)
-    print("  Updated stats.json")
+    # v3.0 stats live in meta/episodes/*.parquet (per-episode stats columns), not
+    # meta/stats.json. The augment_dataset_quantile_stats step below recomputes
+    # them from the new parquet contents — no v2-style stats.json work needed.
 
     # Step 4: Push to HuggingFace (optional)
     if push and repo_id is not None:
-        print(f"[4/4] Pushing to HuggingFace branch: {OUTPUT_BRANCH}")
+        print(f"[4/4] Pushing to HuggingFace (main) and recomputing v3.0 stats")
         api = HfApi()
-
-        try:
-            api.create_branch(repo_id=repo_id, branch=OUTPUT_BRANCH, repo_type="dataset")
-            print(f"  Created branch: {OUTPUT_BRANCH}")
-        except Exception:
-            print(f"  Branch '{OUTPUT_BRANCH}' already exists")
 
         api.upload_folder(
             folder_path=str(dst_dir),
             repo_id=repo_id,
             repo_type="dataset",
-            revision=OUTPUT_BRANCH,
+            revision="main",
             commit_message="Augment dataset with EEF quaternion / rotation-matrix representations via FK (pinocchio)",
         )
-        print(f"\nDone! Dataset: {repo_id} (branch: {OUTPUT_BRANCH})")
+
+        # Recompute v3.0 quantile stats over the augmented dataset, push the
+        # updated meta/episodes/*.parquet, and refresh the v3.0 tag.
+        from lerobot.scripts.augment_dataset_quantile_stats import augment_dataset_with_quantile_stats
+        from lerobot.utils.utils import init_logging
+
+        init_logging()
+        augment_dataset_with_quantile_stats(repo_id=repo_id, root=dst_dir, overwrite=True)
+        print(f"\nDone! Dataset: {repo_id} (main, v3.0 tag refreshed)")
     else:
         print(f"[4/4] Skipped HF push. Local output: {dst_dir}")
         print(f"\nDone! Local dataset: {dst_dir}")

@@ -19,6 +19,10 @@ max_server:
         - joint_state
         - current_pose
         - gripper_state
+    
+    task_manager:
+      model: 'gemma4-e4b'
+      
 
     # ── Robot ─────────────────────────────────────────────────────────
     # Format: "role:topic"  (msg type is hardcoded per role in code)
