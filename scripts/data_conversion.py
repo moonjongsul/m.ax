@@ -45,6 +45,7 @@ from scipy.spatial.transform import Rotation
 from tqdm import tqdm
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "thirdparty" / "lerobot" / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # for data_fix_stats import
 
 URDF_PATH = Path(__file__).parent / "fr3.urdf"
 TCP_FRAME = "fr3_link8"
@@ -281,9 +282,13 @@ def convert_dataset(
         json.dump(info, f, indent=2)
     print("  Updated info.json")
 
-    # v3.0 stats live in meta/episodes/*.parquet (per-episode stats columns), not
-    # meta/stats.json. The augment_dataset_quantile_stats step below recomputes
-    # them from the new parquet contents — no v2-style stats.json work needed.
+    # Stats must be recomputed from the new parquet contents. We always do this
+    # locally so the dataset is consistent on disk regardless of HF push.
+    # (The earlier assumption that augment_dataset_with_quantile_stats would
+    # handle it broke when running in local-only mode.)
+    print("  Recomputing stats (per-episode + global stats.json)...")
+    from data_fix_stats import fix_one
+    fix_one(dst_dir)
 
     # Step 4: Push to HuggingFace (optional)
     if push and repo_id is not None:

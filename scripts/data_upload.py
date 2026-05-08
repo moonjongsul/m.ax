@@ -35,7 +35,7 @@ UPLOAD.append("manufacturing_kitting_dataset_kit_object")
 """
 for db_name in UPLOAD:
     dataset_dir = Path(DB_LOCAL_PATH) / db_name
-    repo_id = f"{HF_USER}/{db_name}"
+    repo_id = f"{HF_USER}/{db_name}"`
     main(dataset_dir=dataset_dir, repo_id=repo_id, private=False)
 """
 

@@ -21,7 +21,13 @@ max_server:
         - gripper_state
     
     task_manager:
-      model: 'gemma4-e4b'
+      model: "google/gemma-4-E4B-it"
+      instruction: "현재 이미지에서 보여지는 상황에 대해 설명해줘"
+      image_num: 6    # number of images to include in the prompt
+      image_dt: 0.5   # sec
+      observation_list:
+        - environment
+
       
 
     # ── Robot ─────────────────────────────────────────────────────────

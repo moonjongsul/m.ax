@@ -67,6 +67,15 @@ class MaxServerNode(Node):
         gripper_domain = int(self._get_param("gripper.ros_domain_id", inference_domain))
         camera_domain = int(self._get_param("camera.ros_domain_id", inference_domain))
 
+        # Task manager config.
+        task_manager_model = str(self._get_param("task_manager.model", ""))
+        task_manager_instruction = str(self._get_param("task_manager.instruction", ""))
+        task_manager_image_num = int(self._get_param("task_manager.image_num", 0))
+        task_manager_image_dt = float(self._get_param("task_manager.image_dt", 0.0))
+        task_manager_observation_list: list[str] = list(
+            self._get_param("task_manager.observation_list", [])
+        )
+
         # Default values surfaced to the web UI via /inference/status.
         self._defaults = {
             "framework": str(self._get_param("inference.default_framework", "")),
@@ -107,7 +116,8 @@ class MaxServerNode(Node):
         self._run_action_group = MutuallyExclusiveCallbackGroup()
         self._load_action_group = MutuallyExclusiveCallbackGroup()
         self._timer_group = MutuallyExclusiveCallbackGroup()
-
+        self._task_manager_buffer_group = MutuallyExclusiveCallbackGroup()
+        
         # ── Components ────────────────────────────────────────────────────
         # Communicator owns its own per-domain rclpy Contexts/Nodes; this main
         # Node only carries action/service/timer interfaces on the inference
@@ -126,7 +136,14 @@ class MaxServerNode(Node):
         )
         self.communicator.start()
         self.inference_manager = InferenceManager()
-        self.task_manager = TaskManager(self)
+        self.task_manager = TaskManager(
+            self,
+            model=task_manager_model,
+            instruction=task_manager_instruction,
+            observation_list=task_manager_observation_list,
+            image_num=task_manager_image_num,
+            image_dt=task_manager_image_dt,
+        )
         self.task_planner = TaskPlanner(self)
 
         # ── ROS interfaces ────────────────────────────────────────────────
@@ -172,6 +189,8 @@ class MaxServerNode(Node):
             self._publish_robot_states,
             callback_group=self._timer_group,
         )
+        
+        
 
         self.get_logger().info(
             f"[max_server] ready. fps={self._fps}, cameras={self.communicator.camera_names()}"
