@@ -1,9 +1,13 @@
 from huggingface_hub import snapshot_download
 
 DOWNLOAD_DIR = '/workspace/m.ax/checkpoints'
+<<<<<<< Updated upstream
 # REPO_ID = 'moonjongsul/manufacturing_kitting_smolvla_rot6d_260430_v2'
 # REPO_ID = 'google/gemma-4-E2B-it'
 REPO_ID = 'google/gemma-4-26B-A4B-it'
+=======
+REPO_ID = 'moonjongsul/smolvla_flip_rot6d_a6000_b24x2_260506'
+>>>>>>> Stashed changes
 
 
 def main():

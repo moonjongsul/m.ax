@@ -7,8 +7,8 @@ max_server:
       default_policy: smolvla
       default_dtype: bfloat16
       default_representation_type: rot6d
-      default_checkpoint: /workspace/m.ax/checkpoints/manufacturing_kitting_smolvla_rot6d_260430_v2/176000
-      default_task_instruction: "kit part"
+      default_checkpoint: /workspace/m.ax/checkpoints/manufacturing_kitting_smolvla_rot6d_260504/best_step_081500_loss_0.003167/pretrained_model
+      default_task_instruction: "flip part"
       default_device: cuda
       ros_domain_id: 0
       observation_list:
@@ -75,13 +75,14 @@ max_server:
           - -0.005804473447127222
           - 0.00571398122328242
         kit:    # CS - x, y, z, qx, qy, qz, qw
-          - 0.5290104746818542
-          - 0.10076406598091125
-          - 0.4850732386112213
-          - -0.37264924752801937
-          - 0.9278134282211229
-          - 0.0005254212437679931
-          - -0.01716123109869071
+          - 0.5337705612182617
+          - 0.10324626415967941
+          - 0.4942077696323395
+          - 0.9245952703433992
+          - -0.3808541130143522
+          - -0.007888929800536154
+          - 0.0033900433797823992
+
 
     # ── Gripper ───────────────────────────────────────────────────────
     # Format: "role:topic"
