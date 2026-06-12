@@ -3,12 +3,12 @@ import { useCallback, useRef } from 'react'
 import { getRos } from './useRosConnection'
 
 // roslib 2.x Action API (ROS 2 native): ROSLIB.Action with sendGoal(goal, onResult, onFeedback, onFailed).
-export function useRosActionClient(serverName, actionType) {
+export function useRosActionClient(serverName, actionType, cell = 'kitting') {
   const actionRef = useRef(null)
   const goalIdRef = useRef(null)
 
   const ensureAction = () => {
-    const ros = getRos()
+    const ros = getRos(cell)
     if (!ros) { throw new Error('ROS not connected') }
     if (!actionRef.current) {
       actionRef.current = new ROSLIB.Action({
@@ -30,7 +30,7 @@ export function useRosActionClient(serverName, actionType) {
     )
     goalIdRef.current = id
     return id
-  }, [serverName, actionType])
+  }, [serverName, actionType, cell])
 
   const cancel = useCallback(() => {
     if (actionRef.current && goalIdRef.current) {

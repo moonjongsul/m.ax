@@ -9,7 +9,7 @@ const CAMERA_TOPICS = [
 ]
 
 export default function CameraView() {
-  const base = useSelector(selectVideoBaseUrl)
+  const base = useSelector(selectVideoBaseUrl('kitting'))
   return (
     <div className="grid grid-cols-2 gap-2">
       {CAMERA_TOPICS.map(({ name, topic }) => (

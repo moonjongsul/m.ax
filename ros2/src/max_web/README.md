@@ -25,7 +25,8 @@ max_web/
 │   ├── index.css             # Tailwind directives
 │   ├── store/store.js        # Redux store: ros / inference / telemetry / lerobot
 │   ├── pages/
-│   │   ├── InferencePage.jsx        # 카메라 + 텔레메트리 + 추론 컨트롤
+│   │   ├── InferencePage.jsx        # 카메라 + 텔레메트리 + 추론 컨트롤 (kitting cell)
+│   │   ├── PickingPage.jsx          # picking cell(별도 PC) 직접 연결 — 호스트/카메라/제어
 │   │   └── LeRobotEditorPage.jsx    # 데이터셋 에디터
 │   ├── hooks/                # rosbridge 래퍼 훅 (singleton 기반)
 │   │   ├── useRosConnection.js
@@ -179,9 +180,23 @@ Vite dev 서버가 켜져 있으면 `/api/*` 요청은 자동으로 8765로 프�
 
 ### 3.2 ROS ↔ Web (rosbridge 경로)
 
-`useRosConnection` 훅이 앱 마운트 시 한 번 `ROSLIB.Ros`를 생성해 모듈 스코프 싱글턴으로 보관한다.
-이후 모든 hook (`useRosTopicSubscription`, `useRosServiceCaller`, `useRosActionClient`)은 `getRos()`로
-이 싱글턴을 가져와 토픽/서비스/액션 객체를 만든다.
+`useRosConnection(cell)` 훅이 **셀(cell)별로** `ROSLIB.Ros`를 하나씩 생성해 모듈 스코프 맵(`rosByCell`)에
+보관한다. 셀은 독립적인 ROS 엔드포인트를 뜻하며, 현재 `kitting`(주 max_server)과 `picking`(별도 PC) 두 개다.
+브라우저는 WebSocket 여러 개를 동시에 열 수 있으므로 두 셀이 동시에 연결된다(`App.jsx`에서 둘 다 마운트).
+
+이후 모든 hook (`useRosTopicSubscription`, `useRosServiceCaller`, `useRosActionClient`)은 `cell` 인자
+(기본 `'kitting'`)를 받아 `getRos(cell)`로 해당 셀의 ROS 인스턴스를 가져온다. 기존 호출부는 인자를 생략해도
+`kitting`으로 동작한다.
+
+#### picking cell (별도 PC 직접 연결)
+
+picking cell은 **max_server를 거치지 않고** 브라우저가 picking PC에 직접 연결한다. `PickingPage`는
+`PickingHostInput`으로 picking PC 호스트를 지정하고, `PickingControl`이 `/picking_cell/pick`
+(`std_srvs/Trigger`)을 `cell='picking'`으로 직호출한다. vision 결과
+(`/picking_cell/box_obj/detection_result/compressed`, `CompressedImage`)는 **rosbridge로 직접 구독**해
+`<img>` data URL로 렌더한다(`PickingCameraView`) — picking cell이 raw 토픽 없이 compressed만 발행하므로
+web_video_server를 쓰지 않는다. 따라서 picking 경로에는 도메인 0의 `rosbridge_server`(9090)만 있으면 된다.
+(자동 트리거는 별개로 max_server의 task_planner가 DDS로 직접 호출.)
 
 연결 상태(`connected`, `connecting`, `error`)와 host/포트(`host`, `rosbridgePort`, `videoPort`)는
 `rosSlice`에 저장되어 UI 상단의 `ConnectionBar`와 카메라 URL 셀렉터(`selectVideoBaseUrl`)에서 사용된다.
@@ -328,8 +343,20 @@ ROS 이미지 토픽을 rosbridge로 직렬화하면 base64 + JSON 인코딩으�
   `max_server.launch.py`의 `bridge_domain_id`가 `inference.ros_domain_id`와 같은지 확인.
 - **카메라가 검정 화면**: `web_video_server`가 카메라 도메인(`camera.ros_domain_id`)에서 토픽을
   보지 못한다. `video_domain_id` 인자를 맞춰서 다시 launch.
+- **picking 검출 이미지가 안 뜸**: picking 영상은 web_video_server가 아니라 **rosbridge로
+  `CompressedImage`를 직접 구독**해 `<img>` data URL로 그린다(`PickingCameraView`). picking cell이
+  raw image_transport 토픽 없이 `/compressed`만 발행하기 때문이다. 따라서 picking cell의 rosbridge가
+  도메인 0에서 토픽을 볼 수 있으면 된다(별도 web_video 불필요). 이미지는 pick 사이클 때만 발행되는
+  단발성이라, **Picking 탭을 먼저 열어 구독을 건 뒤 pick을 호출**해야 그 프레임이 뜬다(첫 호출 전엔
+  "Waiting for detection result…" 표시가 정상).
 - **Inference 시작이 거부됨**: `inferenceSlice`의 `serverState`가 `ready`여야 한다. 정책 미로드 시 `idle`.
 - **LeRobot 페이지 500/CORS**: 백엔드 8765가 안 떠 있거나, 프록시 없이 절대 URL로 접근한 경우.
   반드시 `npm run dev` 또는 `npm run preview` 경유 (Vite proxy 사용).
 - **차트가 빈칸**: `/control/robot_state_package`가 30 Hz로 발행되는지 (`max_server`의 telemetry 타이머
   `telemetry.robot_states_rate_hz` 파라미터) 확인.
+- **picking 서비스 "Timeout exceeded while waiting for service response"**: rosbridge의 기본
+  service-call 타임아웃이 **5초**라, 피킹 사이클처럼 오래 걸리는 서비스는 시간 초과된다.
+  → 클라이언트가 `useRosServiceCaller().call(...)`의 5번째 인자(`bridgeTimeoutSec`)로 더 큰 값을 보낸다
+  (`PickingControl`은 60초). 서버 측 기본값도 `max_server.launch.py`의 `call_service_timeout`(기본 60초,
+  `default_call_service_timeout` 파라미터)으로 올렸다. **picking PC의 rosbridge를 직접 쓰는 경우**, 그쪽
+  rosbridge도 같은 파라미터로 띄우거나 클라이언트 타임아웃 전달에 의존한다(후자가 기본).

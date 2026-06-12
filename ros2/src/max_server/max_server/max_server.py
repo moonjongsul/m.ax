@@ -31,7 +31,10 @@ from max_server.communication.communicator import Communicator
 from max_server.inference.inference_manager import InferenceManager
 from max_server.task_manager.task_manager import TaskManager
 from max_server.task_planner.task_planner import TaskPlanner
-from max_server.utils.config_loader import parse_entry_list
+from max_server.utils.config_loader import (
+    parse_entry_list,
+    parse_service_client_list,
+)
 
 
 STATE_IDLE = "idle"
@@ -59,6 +62,19 @@ class MaxServerNode(Node):
         gripper_pub = parse_entry_list(self._get_param("gripper.publish_list", []))
         cameras = parse_entry_list(self._get_param("camera.subscribe_list", []))
         camera_rotate = self._get_rotate_map(cameras)
+
+        # Picking cell: registered as generic outbound service clients. Shares
+        # the inference domain by default (separate PC, same ROS_DOMAIN_ID).
+        picking_enabled = bool(self._get_param("picking_cell.enabled", False))
+        if picking_enabled:
+            service_clients = parse_service_client_list(
+                self._get_param("picking_cell.service_client_list", [])
+            )
+        else:
+            service_clients = []
+        service_client_domain = int(
+            self._get_param("picking_cell.ros_domain_id", 0)
+        )
 
         # Per-group ROS_DOMAIN_IDs. Defaults match the inference domain so that
         # missing fields collapse to single-domain behavior.
@@ -133,6 +149,8 @@ class MaxServerNode(Node):
             cameras=cameras,
             camera_domain_id=camera_domain,
             camera_rotate=camera_rotate,
+            service_clients=service_clients,
+            service_client_domain_id=service_client_domain,
         )
         self.communicator.start()
         self.inference_manager = InferenceManager()

@@ -7,7 +7,7 @@ max_server:
       default_policy: smolvla
       default_dtype: bfloat16
       default_representation_type: rot6d
-      default_checkpoint: /workspace/m.ax/checkpoints/manufacturing_kitting_smolvla_rot6d_260504/best_step_081500_loss_0.003167/pretrained_model
+      default_checkpoint: /workspace/m.ax/checkpoints/manufacturing_kitting_smolvla_rot6d_260430_v2/200000
       default_task_instruction: "flip part"
       default_device: cuda
       ros_domain_id: 0
@@ -28,7 +28,23 @@ max_server:
       observation_list:
         - environment
 
-      
+    # ── Picking cell (separate PC, same ROS_DOMAIN_ID) ─────────────────
+    # max_server acts as a client of the picking cell. The picking node runs
+    # on another machine but shares domain 0, so DDS discovery makes its
+    # services/topics directly reachable.
+    #
+    # Services are registered as generic service clients in the communicator
+    # (see service_client_list). Format per entry: "name:service:srv_type".
+    #   name     — key used in code, e.g. communicator.call_service("picking_pick")
+    #   service  — fully-qualified service name
+    #   srv_type — "pkg/srv/Type", imported dynamically
+    picking_cell:
+      ros_domain_id: 0
+      enabled: true
+      service_client_list:
+        - "picking_pick:/picking_cell/pick:std_srvs/srv/Trigger"
+      # sensor_msgs/CompressedImage — vision detection result (web UI consumes it).
+      image_topic: "/picking_cell/box_obj/detection_result/compressed"
 
     # ── Robot ─────────────────────────────────────────────────────────
     # Format: "role:topic"  (msg type is hardcoded per role in code)

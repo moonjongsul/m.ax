@@ -47,14 +47,29 @@ ROS 2 인터페이스 정의만 들어 있는 패키지. `max_server`와 `max_we
 - `communication/communicator.py` — 그룹별 `ROS_DOMAIN_ID`마다 독립적인 rclpy Context/Node/Executor를 띄워 sub/pub을 처리. 카메라가 도메인 1, 로봇/추론이 도메인 0 같은 멀티-도메인 토폴로지를 지원
 - `inference/inference_manager.py` — LeRobot 정책(pi0.5, SmolVLA 등) 로드/언로드/predict. ROS 의존성 없음
 - `data_processing/data_converter.py` — 이미지/상태 전처리, 표현형(joint/quat/rot6d) 변환
-- `task_manager/`, `task_planner/` — Phase 2 placeholder
-- `utils/config_loader.py` — YAML `"role:topic"` 항목 파싱
+- `task_manager/` — Phase 2 placeholder
+- `task_planner/task_planner.py` — 계획 분해(아직 identity placeholder) + **picking cell 트리거**(`trigger_picking()` → communicator의 `picking_pick` 서비스 클라이언트 호출). 추론 루프(자동)·서버측(수동) 공통 진입점
+- `utils/config_loader.py` — YAML `"role:topic"` 항목 파싱 + `"name:service:srv_type"` 서비스 클라이언트 파싱(`resolve_srv_type`로 동적 import)
+
+#### picking cell 연동
+
+picking cell은 **별도 PC**에서 실행되지만 **같은 `ROS_DOMAIN_ID`(0)·같은 LAN**에 있어 DDS discovery로
+서비스/토픽이 바로 보인다. max_server는 그 서비스를 **범용 service client**로 등록해 호출한다.
+
+- 등록은 communicator의 `service_clients`(키별 client 딕셔너리)에서 일반화 — picking 전용 코드가 아니라
+  서비스가 늘어나면 config에 한 줄 추가하면 된다.
+- config `picking_cell.service_client_list`: `"name:service:srv_type"` 형식
+  (예: `picking_pick:/picking_cell/pick:std_srvs/srv/Trigger`)
+- 호출: `communicator.call_service("picking_pick", Trigger.Request())` — 응답까지 블로킹(타임아웃 포함)
+- vision 결과 이미지(`picking_cell.image_topic`, CompressedImage)는 max_server를 거치지 않고
+  **웹이 picking PC의 web_video_server로 직접** 구독한다.
 
 설정 파일: [max_server/config/kitting_config.yaml](max_server/config/kitting_config.yaml)
 - `inference.*` — fps, default 정책/체크포인트/태스크, 관측 리스트, `ros_domain_id`
 - `robot.*` — joint 이름, 프리셋 포즈(home/kit), sub/pub 토픽, `ros_domain_id`
 - `gripper.*` — 프리셋(open/close), sub/pub 토픽, `ros_domain_id`
 - `camera.*` — 4채널(wrist_front/wrist_rear/front_view/side_view) sub 토픽 + 회전 각도, `ros_domain_id`
+- `picking_cell.*` — picking cell(별도 PC) 연동. `enabled`, `ros_domain_id`, `service_client_list`(`"name:service:srv_type"`), `image_topic`
 
 ### 1.3 max_bringup
 

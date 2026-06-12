@@ -140,15 +140,18 @@ env:
 
 data_collect:
   type: 'lerobot'
-  repo_id: 'manufacturing_kitting_dataset'
+  repo_id: 'manufacturing_kitting_dataset_nonflip_full_260605'
   hz: 30
   warmup_sec: 1.0
   img_shape: '640x480'
   output_dir: '/workspace/m.ax/datasets'
   task_prompt: 
+    full_nonflip:
+      - "pick up the object and place it in the tray"
+    full_flip:
+      - "flip the object, then pick it up and place it in the tray"
     flip_object:
       - "flip object"
-      - "flip part"
       # - "flip component"
       # - "flip part over"
       # - "turn object upside down"
@@ -159,9 +162,6 @@ data_collect:
     pick_object:
       # 핵심 의미: grasp + small lift (잡고 살짝 들어올리기)
       - "pick object"
-      - "pick part"
-      - "pick up object"
-      - "pick up part"
       # - "grasp part"
       # - "grasp and lift part"
       # - "grip part"
@@ -172,7 +172,6 @@ data_collect:
     kit_object:
       # 핵심 의미: 정확한 각도로 트레이에 안착 (precision placement)
       - "kit object"
-      - "kit part"
       # - "kit object in tray"
       # - "kit object into tray"
       # - "kit part into tray"
@@ -187,11 +186,9 @@ data_collect:
       # - "position object in tray"
       # - "nest object in tray"
     move_object:
-      - "move part"           # 가장 안전 (목적지 언급 없음)
       - "move object"
-      # - "move component"
-      - "move to target"
-      - "move to target location"
+      # - "move to target"
+      # - "move to target location"
       # - "go to target"
       # - "go to target position"
       # - "go to destination"

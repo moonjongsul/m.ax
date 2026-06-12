@@ -21,7 +21,11 @@ from rclpy.executors import SingleThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 
-from max_server.utils.config_loader import CAMERA_MSG_TYPE, resolve_role_msg_type
+from max_server.utils.config_loader import (
+    CAMERA_MSG_TYPE,
+    resolve_role_msg_type,
+    resolve_srv_type,
+)
 
 
 class _DomainEndpoint:
@@ -76,6 +80,8 @@ class Communicator:
         cameras: list[dict],
         camera_domain_id: int,
         camera_rotate: dict[str, int] | None = None,
+        service_clients: list[dict] | None = None,
+        service_client_domain_id: int | None = None,
     ):
         self._logger = logger
         self._lock = threading.Lock()
@@ -116,6 +122,17 @@ class Communicator:
             gripper_publish, domain_id=gripper_domain_id, label="gripper",
         )
         self._setup_cameras(cameras, domain_id=camera_domain_id)
+
+        # Generic outbound service clients (e.g. the picking cell on another
+        # PC sharing a domain — reachable via DDS discovery). Keyed by name so
+        # callers do call_service("picking_pick", req) without bespoke methods.
+        self._service_clients: dict[str, object] = {}
+        if service_clients:
+            sdomain = (
+                service_client_domain_id if service_client_domain_id is not None
+                else robot_domain_id
+            )
+            self._setup_service_clients(service_clients, domain_id=sdomain)
 
     # ─── Endpoint management ─────────────────────────────────────────────────
 
@@ -196,6 +213,18 @@ class Communicator:
             ep.node.create_subscription(CAMERA_MSG_TYPE, topic, cb, self._sensor_qos())
             self._logger.info(
                 f"[comm] camera sub: {topic} ({name}, rotate={rotate}) on domain {domain_id}"
+            )
+
+    def _setup_service_clients(self, entries: list[dict], domain_id: int):
+        ep = self._get_endpoint(domain_id)
+        for entry in entries:
+            name = entry["name"]
+            service = entry["service"]
+            srv_cls = resolve_srv_type(entry["srv_type"])
+            self._service_clients[name] = ep.node.create_client(srv_cls, service)
+            self._logger.info(
+                f"[comm] service client '{name}': {service} "
+                f"({entry['srv_type']}) on domain {domain_id}"
             )
 
     # ─── Callbacks ───────────────────────────────────────────────────────────
@@ -310,3 +339,34 @@ class Communicator:
         self._gripper_cmd_pub.publish(msg)
         with self._lock:
             self._last_gripper_command = msg
+
+    # ─── Service clients ─────────────────────────────────────────────────────
+
+    def has_service_client(self, name: str) -> bool:
+        return name in self._service_clients
+
+    def call_service(self, name: str, request, timeout_sec: float = 30.0):
+        """Call a registered service client and block for its response.
+
+        Returns the service response, or None on failure (unknown client,
+        service unavailable, or timeout). The client's domain endpoint spins
+        on its own thread, so the returned future resolves there while we wait.
+        """
+        client = self._service_clients.get(name)
+        if client is None:
+            self._logger.warn(f"[comm] no service client named '{name}'")
+            return None
+
+        if not client.wait_for_service(timeout_sec=timeout_sec):
+            self._logger.warn(
+                f"[comm] service '{name}' unavailable after {timeout_sec}s"
+            )
+            return None
+
+        future = client.call_async(request)
+        done = threading.Event()
+        future.add_done_callback(lambda _f: done.set())
+        if not done.wait(timeout=timeout_sec):
+            self._logger.warn(f"[comm] service '{name}' call timed out")
+            return None
+        return future.result()

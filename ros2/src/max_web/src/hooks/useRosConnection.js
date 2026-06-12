@@ -8,41 +8,44 @@ import {
   setError,
 } from '../features/ros/rosSlice'
 
-let rosSingleton = null
+// One ROSLIB.Ros instance per cell ('kitting', 'picking', ...). The browser
+// can hold multiple WebSocket connections at once, so each cell talks to its
+// own rosbridge independently.
+const rosByCell = new Map()
 
-export function getRos() {
-  return rosSingleton
+export function getRos(cell = 'kitting') {
+  return rosByCell.get(cell) || null
 }
 
-export function useRosConnection() {
+export function useRosConnection(cell = 'kitting') {
   const dispatch = useDispatch()
-  const url = useSelector(selectRosbridgeUrl)
-  const connected = useSelector((s) => s.ros.connected)
+  const url = useSelector(selectRosbridgeUrl(cell))
+  const connected = useSelector((s) => (s.ros.cells[cell] || {}).connected)
   const rosRef = useRef(null)
 
   useEffect(() => {
-    dispatch(setConnecting(true))
+    dispatch(setConnecting({ cell, value: true }))
     const ros = new ROSLIB.Ros({ url })
-    rosSingleton = ros
+    rosByCell.set(cell, ros)
     rosRef.current = ros
 
     ros.on('connection', () => {
-      dispatch(setConnecting(false))
-      dispatch(setConnected(true))
+      dispatch(setConnecting({ cell, value: false }))
+      dispatch(setConnected({ cell, value: true }))
     })
     ros.on('close', () => {
-      dispatch(setConnected(false))
-      dispatch(setConnecting(false))
+      dispatch(setConnected({ cell, value: false }))
+      dispatch(setConnecting({ cell, value: false }))
     })
     ros.on('error', (err) => {
-      dispatch(setError(String(err?.message || err || 'connection error')))
+      dispatch(setError({ cell, error: String(err?.message || err || 'connection error') }))
     })
 
     return () => {
       try { ros.close() } catch { /* noop */ }
-      if (rosSingleton === ros) { rosSingleton = null }
+      if (rosByCell.get(cell) === ros) { rosByCell.delete(cell) }
     }
-  }, [url, dispatch])
+  }, [cell, url, dispatch])
 
   return { connected }
 }

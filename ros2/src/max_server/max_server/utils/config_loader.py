@@ -1,5 +1,7 @@
 """Config helpers: parse 'name:topic' entries and resolve msg types by role."""
 
+import importlib
+
 from sensor_msgs.msg import CompressedImage, JointState
 from std_msgs.msg import Float32
 from geometry_msgs.msg import PoseStamped
@@ -46,3 +48,40 @@ def parse_entry(entry: str) -> dict:
 
 def parse_entry_list(entries: list[str]) -> list[dict]:
     return [parse_entry(e) for e in entries]
+
+
+def resolve_srv_type(srv_type: str):
+    """Import a service class from its 'pkg/srv/Type' string.
+
+    e.g. 'std_srvs/srv/Trigger' -> std_srvs.srv.Trigger
+    """
+    parts = srv_type.split("/")
+    if len(parts) != 3:
+        raise ValueError(
+            f"Invalid srv_type '{srv_type}'. Expected 'pkg/srv/Type'"
+        )
+    pkg, sub, name = parts
+    module = importlib.import_module(f"{pkg}.{sub}")
+    return getattr(module, name)
+
+
+def parse_service_client_entry(entry: str) -> dict:
+    """Parse a 'name:service:srv_type' string into a dict.
+
+    e.g. 'picking_pick:/picking_cell/pick:std_srvs/srv/Trigger' ->
+         {'name': 'picking_pick',
+          'service': '/picking_cell/pick',
+          'srv_type': 'std_srvs/srv/Trigger'}
+    """
+    parts = entry.split(":")
+    if len(parts) != 3:
+        raise ValueError(
+            f"Invalid service client entry: '{entry}'. "
+            "Expected 'name:service:srv_type'"
+        )
+    name, service, srv_type = parts
+    return {"name": name, "service": service, "srv_type": srv_type}
+
+
+def parse_service_client_list(entries: list[str]) -> list[dict]:
+    return [parse_service_client_entry(e) for e in entries]
