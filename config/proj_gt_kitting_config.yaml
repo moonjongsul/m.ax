@@ -140,16 +140,16 @@ env:
 
 data_collect:
   type: 'lerobot'
-  repo_id: 'manufacturing_kitting_dataset_nonflip_full_260605'
+  repo_id: 'manufacturing_kitting_dataset_nonflip_full_260709'
   hz: 30
   warmup_sec: 1.0
   img_shape: '640x480'
   output_dir: '/workspace/m.ax/datasets'
   task_prompt: 
     full_nonflip:
-      - "pick up the object and place it in the tray"
+      - "pick up the black part on the yellow board and place it in the white tray"
     full_flip:
-      - "flip the object, then pick it up and place it in the tray"
+      - "flip the black part on the yellow board, then pick it up and place it in the white tray"
     flip_object:
       - "flip object"
       # - "flip component"

@@ -36,6 +36,10 @@ const initialState = {
   // Preset poses from YAML (names only; values stay on the server).
   robotPoseNames: [],
   gripperPoseNames: [],
+
+  // Picking cell host (from picking_cell.ip in the server YAML). Empty until
+  // the first /inference/status is received.
+  pickingHost: '',
 }
 
 const inferenceSlice = createSlice({
@@ -59,6 +63,8 @@ const inferenceSlice = createSlice({
 
       state.robotPoseNames = s.robot_pose_names || []
       state.gripperPoseNames = s.gripper_pose_names || []
+
+      state.pickingHost = s.picking_host || ''
 
       // One-time form init from server-provided defaults.
       if (!state.formInitialized) {

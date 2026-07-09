@@ -34,3 +34,7 @@ string default_representation_type
 # The web UI renders one button per name.
 string[] robot_pose_names
 string[] gripper_pose_names
+
+# Picking cell host (from picking_cell.ip in the YAML config). The web UI uses
+# this to point its 'picking' ROS connection at the picking PC automatically.
+string picking_host

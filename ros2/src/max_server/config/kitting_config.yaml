@@ -28,10 +28,10 @@ max_server:
       observation_list:
         - environment
 
-    # ── Picking cell (separate PC, same ROS_DOMAIN_ID) ─────────────────
+    # ── Picking cell (separate PC, ROS_DOMAIN_ID 3) ────────────────────
     # max_server acts as a client of the picking cell. The picking node runs
-    # on another machine but shares domain 0, so DDS discovery makes its
-    # services/topics directly reachable.
+    # on another machine on domain 3; max_server opens its own domain-3 context
+    # (communicator endpoint) and reaches the picking services via DDS.
     #
     # Services are registered as generic service clients in the communicator
     # (see service_client_list). Format per entry: "name:service:srv_type".
@@ -39,7 +39,8 @@ max_server:
     #   service  — fully-qualified service name
     #   srv_type — "pkg/srv/Type", imported dynamically
     picking_cell:
-      ros_domain_id: 0
+      ip: '172.16.0.9'
+      ros_domain_id: 3
       enabled: true
       service_client_list:
         - "picking_pick:/picking_cell/pick:std_srvs/srv/Trigger"

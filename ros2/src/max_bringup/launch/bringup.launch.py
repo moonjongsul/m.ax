@@ -37,7 +37,7 @@ def generate_launch_description():
             PathJoinSubstitution([FindPackageShare("max_server"), "launch", "max_server.launch.py"])
         ]),
     )
-
+    
     return LaunchDescription([
         use_cameras_arg,
         use_domain_bridge_arg,

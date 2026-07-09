@@ -27,6 +27,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'pedal = max_bringup.pedal_node:main',
         ],
     },
 )

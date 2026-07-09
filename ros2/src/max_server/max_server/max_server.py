@@ -75,6 +75,9 @@ class MaxServerNode(Node):
         service_client_domain = int(
             self._get_param("picking_cell.ros_domain_id", 0)
         )
+        # Picking PC host, surfaced to the web UI via /inference/status so the
+        # browser can auto-point its 'picking' connection at the picking cell.
+        self._picking_host = str(self._get_param("picking_cell.ip", ""))
 
         # Per-group ROS_DOMAIN_IDs. Defaults match the inference domain so that
         # missing fields collapse to single-domain behavior.
@@ -298,6 +301,9 @@ class MaxServerNode(Node):
         # Preset pose names (order preserved from parameter name sort)
         msg.robot_pose_names = list(self._robot_poses.keys())
         msg.gripper_pose_names = list(self._gripper_poses.keys())
+
+        # Picking cell host (from YAML), for web UI auto-connect.
+        msg.picking_host = self._picking_host
 
         self._status_pub.publish(msg)
 
