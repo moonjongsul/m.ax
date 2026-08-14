@@ -140,7 +140,7 @@ env:
 
 data_collect:
   type: 'lerobot'
-  repo_id: 'manufacturing_kitting_dataset_nonflip_full_260709'
+  repo_id: 'manufacturing_kitting_dataset_flip_full_260724'
   hz: 30
   warmup_sec: 1.0
   img_shape: '640x480'
