@@ -18,7 +18,6 @@ model = AutoModelForMultimodalLM.from_pretrained(
     MODEL_ID,
     dtype=torch.bfloat16,
     device_map="auto",
-    # attn_implementation={"text_config": "flash_attention_2", "vision_config": "sdpa"},
     attn_implementation="sdpa",
 )
 model.eval()
@@ -27,8 +26,27 @@ gen_cfg = model.generation_config
 gen_cfg.do_sample = False
 gen_cfg.num_beams = 1
 gen_cfg.use_cache = True
+gen_cfg.cache_implementation = "static"
 if gen_cfg.pad_token_id is None:
     gen_cfg.pad_token_id = processor.tokenizer.pad_token_id or processor.tokenizer.eos_token_id
+
+lm = getattr(model, "language_model", None) or getattr(model, "model", None)
+if lm is not None and hasattr(lm, "forward"):
+    lm.forward = torch.compile(
+        lm.forward,
+        mode="reduce-overhead",
+        fullgraph=False,
+        dynamic=False,
+    )
+    print(f"Compiled language model: {type(lm).__name__}")
+else:
+    model.forward = torch.compile(
+        model.forward,
+        mode="reduce-overhead",
+        fullgraph=False,
+        dynamic=False,
+    )
+    print("Compiled top-level model.forward")
 
 instruction = (
     "이 이미지는 제조 도메인에서 로봇을 활용한 키팅 작업 수행을 위한 목표 이미지야. "
@@ -81,10 +99,14 @@ def build_inputs(image, text):
     ).to(model.device)
 
 
+print("Warming up (torch.compile takes time on first runs)...")
 with torch.inference_mode():
-    warm_inputs = build_inputs(img, instruction)
-    _ = model.generate(**warm_inputs, max_new_tokens=8)
-    torch.cuda.synchronize()
+    for w in range(3):
+        t_w = time.time()
+        warm_inputs = build_inputs(img, instruction)
+        _ = model.generate(**warm_inputs, max_new_tokens=MAX_NEW_TOKENS)
+        torch.cuda.synchronize()
+        print(f"  warmup {w + 1}/3: {time.time() - t_w:.2f}s")
 
 for i in range(N_ITERS):
     t0 = time.time()
