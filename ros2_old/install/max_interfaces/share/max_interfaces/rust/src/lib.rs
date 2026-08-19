@@ -1,0 +1,1 @@
+/workspace/m.ax/ros2/build/max_interfaces/rosidl_generator_rs/max_interfaces/rust/src/lib.rs

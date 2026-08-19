@@ -1,0 +1,1 @@
+/workspace/m.ax/ros2/build/max_interfaces/ament_cmake_core/max_interfacesConfig.cmake

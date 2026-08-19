@@ -1,0 +1,1 @@
+/workspace/m.ax/ros2/build/max_interfaces/rosidl_typesupport_introspection_cpp/max_interfaces/msg/detail/robot_states_package__rosidl_typesupport_introspection_cpp.hpp

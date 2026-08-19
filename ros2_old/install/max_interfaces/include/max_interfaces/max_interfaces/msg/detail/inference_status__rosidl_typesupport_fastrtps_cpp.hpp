@@ -1,0 +1,1 @@
+/workspace/m.ax/ros2/build/max_interfaces/rosidl_typesupport_fastrtps_cpp/max_interfaces/msg/detail/inference_status__rosidl_typesupport_fastrtps_cpp.hpp

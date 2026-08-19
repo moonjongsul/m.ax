@@ -1,0 +1,1 @@
+/workspace/m.ax/ros2/build/max_interfaces/rosidl_generator_c/max_interfaces/msg/detail/inference_status__functions.h

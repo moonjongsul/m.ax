@@ -1,0 +1,1 @@
+/workspace/m.ax/ros2/build/max_server/launch/max_server.launch.py

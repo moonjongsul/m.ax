@@ -1,0 +1,1 @@
+/workspace/m.ax/ros2/build/max_interfaces/rosidl_generator_cpp/max_interfaces/msg/detail/robot_states_package__traits.hpp

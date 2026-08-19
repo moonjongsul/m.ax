@@ -1,0 +1,1 @@
+/workspace/m.ax/ros2/src/max_interfaces/msg/RobotStatesPackage.msg
