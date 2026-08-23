@@ -13,6 +13,8 @@ find_package(action_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/InferenceStatus.msg"
   "msg/RobotStatesPackage.msg"
+  "msg/RecorderStatus.msg"
+  "srv/RecordCommand.srv"
   "srv/UnloadPolicy.srv"
   "srv/MoveToPose.srv"
   "action/LoadPolicy.action"

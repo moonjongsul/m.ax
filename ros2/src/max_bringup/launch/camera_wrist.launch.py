@@ -17,7 +17,7 @@ from launch_ros.substitutions import FindPackageShare
 def generate_launch_description():
     video_domain_arg = DeclareLaunchArgument(
         "video_domain_id",
-        default_value="1",
+        default_value="0",
         description="ROS_DOMAIN_ID for web_video_server (must match camera.ros_domain_id)",
     )
 
@@ -37,7 +37,7 @@ def generate_launch_description():
         emulate_tty=True,
         additional_env=cam_env,
         parameters=[{
-            'serial_no': '_315122272391',
+            'serial_no': '_335122271613',
             'enable_depth': False,
             'enable_infra1': False,
             'enable_infra2': False,
@@ -55,7 +55,7 @@ def generate_launch_description():
         emulate_tty=True,
         additional_env=cam_env,
         parameters=[{
-            'serial_no': '_335122271613',
+            'serial_no': '_315122272391',
             'enable_depth': False,
             'enable_infra1': False,
             'enable_infra2': False,
@@ -64,40 +64,6 @@ def generate_launch_description():
             'rotation_filter.rotation': 180.0,
         }],
     )
-
-    # ── USB webcam ──────────────────────────────────────────────────────
-    # Arducam 1080P Low Light (serial UC684). webcam_ros2 는 serial_number 로
-    # /dev/videoN 을 스스로 찾으므로 노드 번호가 바뀌어도 된다.
-    webcam_config = os.path.join(
-        get_package_share_directory('webcam_ros2'),
-        'config',
-        'camera_config.yaml',
-    )
-
-    with open(webcam_config, 'r') as f:
-        webcam_cameras = yaml.safe_load(f)['webcam_node']['ros__parameters']['cameras']
-
-    webcam_nodes = [
-        Node(
-            package='webcam_ros2',
-            executable='webcam_node',
-            name=f'webcam_node_{cam["name"]}',
-            output='screen',
-            emulate_tty=True,
-            additional_env=cam_env,
-            parameters=[{
-                'camera_id':            cam['id'],
-                'camera_name':          cam['name'],
-                'width':                cam['width'],
-                'height':               cam['height'],
-                'fps':                  cam['fps'],
-                'serial_number':        cam['serial_number'],
-                'topic':                cam['topic'],
-                'power_line_frequency': cam.get('power_line_frequency', -1),
-            }],
-        )
-        for cam in webcam_cameras
-    ]
 
     # ── domain_bridge ───────────────────────────────────────────────────
     domain_bridge_launch = IncludeLaunchDescription(
@@ -115,7 +81,6 @@ def generate_launch_description():
     staged = [
         TimerAction(period=0.0, actions=[rs_wrist_front]),
         TimerAction(period=2.0, actions=[rs_wrist_rear]),
-        TimerAction(period=4.0, actions=webcam_nodes),
         # TimerAction(period=6.0, actions=[domain_bridge_launch]),
     ]
 

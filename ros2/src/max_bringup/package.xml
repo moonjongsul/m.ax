@@ -12,6 +12,7 @@
   <exec_depend>domain_bridge</exec_depend>
   <exec_depend>orbbec_camera</exec_depend>
   <exec_depend>realsense2_camera</exec_depend>
+  <exec_depend>webcam_ros2</exec_depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

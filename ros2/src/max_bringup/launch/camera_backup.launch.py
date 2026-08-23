@@ -1,6 +1,5 @@
 import os
 
-import yaml
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
@@ -65,39 +64,48 @@ def generate_launch_description():
         }],
     )
 
-    # ── USB webcam ──────────────────────────────────────────────────────
-    # Arducam 1080P Low Light (serial UC684). webcam_ros2 는 serial_number 로
-    # /dev/videoN 을 스스로 찾으므로 노드 번호가 바뀌어도 된다.
-    webcam_config = os.path.join(
-        get_package_share_directory('webcam_ros2'),
-        'config',
-        'camera_config.yaml',
+    # realsense D435
+    rs_front_view = Node(
+        package='realsense2_camera',
+        executable='realsense2_camera_node',
+        namespace='/observation',
+        name='front_view',
+        output='screen',
+        emulate_tty=True,
+        additional_env=cam_env,
+        parameters=[{
+            'serial_no': '_233622071056',
+            'enable_color': True,
+            'enable_depth': True,
+            'enable_infra1': False,
+            'enable_infra2': False,
+            'enable_gyro': False,
+            'enable_accel': False,
+            'rgb_camera.color_profile': '640x480x30',
+        }],
     )
 
-    with open(webcam_config, 'r') as f:
-        webcam_cameras = yaml.safe_load(f)['webcam_node']['ros__parameters']['cameras']
-
-    webcam_nodes = [
-        Node(
-            package='webcam_ros2',
-            executable='webcam_node',
-            name=f'webcam_node_{cam["name"]}',
-            output='screen',
-            emulate_tty=True,
-            additional_env=cam_env,
-            parameters=[{
-                'camera_id':            cam['id'],
-                'camera_name':          cam['name'],
-                'width':                cam['width'],
-                'height':               cam['height'],
-                'fps':                  cam['fps'],
-                'serial_number':        cam['serial_number'],
-                'topic':                cam['topic'],
-                'power_line_frequency': cam.get('power_line_frequency', -1),
-            }],
-        )
-        for cam in webcam_cameras
-    ]
+    # realsense D435I (has IMU/Motion module; keep depth enabled at low rate
+    # so base_stream can be resolved — depth topic can be ignored downstream)
+    rs_side_view = Node(
+        package='realsense2_camera',
+        executable='realsense2_camera_node',
+        namespace='/observation',
+        name='side_view',
+        output='screen',
+        emulate_tty=True,
+        additional_env=cam_env,
+        parameters=[{
+            'serial_no': '_238722071506',
+            'enable_color': True,
+            'enable_depth': True,
+            'enable_infra1': False,
+            'enable_infra2': False,
+            'enable_gyro': False,
+            'enable_accel': False,
+            'rgb_camera.color_profile': '640x480x30',
+        }],
+    )
 
     # ── domain_bridge ───────────────────────────────────────────────────
     domain_bridge_launch = IncludeLaunchDescription(
@@ -111,12 +119,14 @@ def generate_launch_description():
     )
 
     # USB 경합 방지: 순차 기동
-    # RealSense wrist_front → wrist_rear → webcam → domain_bridge
+    # RealSense front → rear → Orbbec secondary → Orbbec primary → domain_bridge
+    # (Orbbec primary는 secondary 이후에 기동해야 sync trigger가 맞음)
     staged = [
         TimerAction(period=0.0, actions=[rs_wrist_front]),
         TimerAction(period=2.0, actions=[rs_wrist_rear]),
-        TimerAction(period=4.0, actions=webcam_nodes),
-        # TimerAction(period=6.0, actions=[domain_bridge_launch]),
+        # TimerAction(period=4.0, actions=[rs_front_view]),
+        # TimerAction(period=6.0, actions=[rs_side_view]),
+        # TimerAction(period=8.0, actions=[domain_bridge_launch]),
     ]
 
     return LaunchDescription([

@@ -1,0 +1,48 @@
+# Data-collection control, sent by the teleop operator's buttons to a
+# recorder node that may live on a different machine.
+#
+# The request carries a command and nothing else. Naming episodes,
+# attaching metadata and deciding what is on disk are all the recorder's
+# business -- the caller is a set of buttons and knows none of it.
+#
+# The recorder owns the state machine and is the single source of truth:
+# a command that does not apply to its current state is rejected with
+# success=false rather than silently changing anything. The caller is not
+# expected to track state -- it reacts to RecorderStatus instead.
+
+# START : begin a new episode.                    IDLE            -> RECORDING
+# STOP  : end recording, keep the data buffered.  RECORDING       -> PENDING
+# SAVE  : commit to storage. From RECORDING this  RECORDING/PENDING -> IDLE
+#         also stops first, so a good demo ends
+#         with a single press.
+# DELETE: discard. From RECORDING or PENDING this RECORDING/PENDING -> IDLE
+#         drops the buffered episode; from IDLE   IDLE            -> IDLE
+#         it deletes the most recently saved one,
+#         so an accidental SAVE can be undone.
+#         How far back that undo reaches is the
+#         recorder's policy.
+uint8 START  = 0
+uint8 STOP   = 1
+uint8 SAVE   = 2
+uint8 DELETE = 3
+
+uint8 command
+---
+# false when the command did not apply to the recorder's state (nothing
+# to save, nothing left to undo) or when storage failed. Not an error to
+# log loudly -- the operator pressing SAVE twice is normal.
+bool success
+
+# Human-readable reason, always populated on failure.
+string message
+
+# The episode the recorder acted on: the id it generated for a START, or
+# the one it resolved a DELETE to. Empty if the command touched no
+# episode. Informational only -- it is here so the operator can see which
+# episode a button press affected, not for the caller to send back.
+string episode_id
+
+# The recorder's state after handling this command, using the constants
+# in RecorderStatus. Lets a caller stay in sync without waiting for the
+# next status message.
+uint8 state
