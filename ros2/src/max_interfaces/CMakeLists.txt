@@ -14,6 +14,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/InferenceStatus.msg"
   "msg/RobotStatesPackage.msg"
   "msg/RecorderStatus.msg"
+  "msg/TeleopAction.msg"
   "srv/RecordCommand.srv"
   "srv/UnloadPolicy.srv"
   "srv/MoveToPose.srv"

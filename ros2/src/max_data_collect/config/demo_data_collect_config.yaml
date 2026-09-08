@@ -1,0 +1,241 @@
+# max_data_collect -- demonstration (teleop) recording.
+#
+# Converted from the hand-written spec into ROS 2 parameter form: one
+# `<node_name>: ros__parameters:` root, maps instead of lists-of-maps,
+# and no duplicate keys. rclpy flattens nested maps into dotted parameter
+# names, which is what the node reads back.
+#
+# Rollout recording (VLA-driven) uses the same schema with a different
+# `action.topic` -- see rollout_data_collect_config.yaml.
+
+max_data_collect:
+  ros__parameters:
+
+    # ── Session ────────────────────────────────────────────────────────
+    # How the episode is produced. Stored in metadata.json so demo and
+    # rollout episodes stay distinguishable once they share a dataset.
+    #   demo    : teleop operator
+    #   rollout : VLA policy
+    source: demo
+
+    output_dir: /workspace/m.ax/datasets
+    dataset_name: kitting_dataset_xarm7_pick_kit_260826
+    # ── Task / prompts ─────────────────────────────────────────────────
+    # Episode-level values. Written once into the HDF5 `/meta` group,
+    # NOT repeated per frame -- goal_image alone would be ~84 MB of the
+    # same JPEG over a 40 s episode. The lerobot exporter broadcasts them
+    # to per-frame columns at conversion time.
+    #
+    # `subgoal` is left empty here on purpose: it is segment-scoped
+    # (pi-0.7 style) and gets filled in by the editing GUI, not at
+    # collection time.
+    task:
+      # main_prompt: "grasp the black plastic object, flip it upside down, pick it up"   # flip & pick 
+      # main_prompt: "pick up the black plastic object"   # pick
+      # main_prompt: "place the black plastic object in the white tray"    # kit
+      main_prompt: "pick up the black plastic object, move it to the white tray, and place it in the tray"    # pick & kit
+      # main_prompt: "flip the black plastic object upside down then pick it up, move it to the white tray, and place it in the tray"    # flip & pick & kit
+
+      goal_image: ""          # path to a goal frame; filled in by hand later
+      total_score: 1.0        # episode-level score, editable later
+
+      # Sliding-window length used when labelling subgoals, in SECONDS so
+      # it stays meaningful if collect_hz ever changes
+      # (segment_frames = round(segment_sec * collect_hz)).
+      #
+      # Windows are stride-1, so window i starts at frame i and segment
+      # index == frame index. That is why nothing segment-shaped is
+      # stored: the label for window i is written straight onto frame i
+      # as `subtask_index` / `subtask_score`. This value is recorded in
+      # tasks.json purely as a hint for the editing GUI.
+      segment_sec: 1.0
+
+    # ── Recording ──────────────────────────────────────────────────────
+    recording:
+      # Sampling rate of the recorder loop. One HDF5 row per tick.
+      # Sources faster than this are downsampled (latest wins); slower
+      # ones repeat their last value -- the gripper at ~21 Hz does this
+      # and that is accepted.
+      collect_hz: 30.0
+
+      # Discard the first N seconds after START. Lets the operator settle
+      # and lets every stream come up before the first row is kept.
+      warmup_sec: 1.0
+
+      # A source with no new message for this long is flagged stale in
+      # the recorded row. Not fatal -- the last value is held.
+      staleness_timeout: 1.0
+
+      # Refuse to START while any configured source has never published.
+      require_all_sources: true
+
+      # Frames are handed to the writer through a queue so disk latency
+      # never stalls sampling. abort = fail the episode loudly if it
+      # fills; drop = discard frames and count them.
+      queue_size: 900
+      on_overflow: abort
+
+    # ── QoS ────────────────────────────────────────────────────────────
+    # Every observation/action source is subscribed BEST_EFFORT.
+    #
+    # This is not a preference, it is a compatibility requirement: the
+    # action and EEF topics are published BEST_EFFORT, and a RELIABLE
+    # subscriber does NOT connect to a BEST_EFFORT publisher -- it simply
+    # receives nothing, with no error. The reverse direction is fine, so
+    # one BEST_EFFORT subscriber works for every source here (verified
+    # against the RELIABLE joint/gripper/camera publishers).
+    qos:
+      reliability: best_effort
+      depth: 10
+
+    # ── Storage ────────────────────────────────────────────────────────
+    storage:
+      # Per-episode HDF5 for states, one mp4 per camera alongside it.
+      data_format: hdf5
+
+      # hevc_nvenc measured 0.8 KB/frame at 19.6x realtime on this Tegra;
+      # libsvtav1 only reaches 1.0x, too slow for 3 cameras at 30 Hz.
+      video_codec: hevc_nvenc
+      video_cq: 28            # quality: lower = bigger + better
+      video_preset: p4
+
+      # Write the episode in a background thread so SAVE returns at once.
+      async_save: true
+
+      # Keyframes: the first kept frame (right after warmup) and the last
+      # one before STOP, saved as JPEGs next to the mp4s:
+      #     start_<camera>.jpg / end_<camera>.jpg   -- one per camera
+      #     start_composite.jpg / end_composite.jpg -- the same frames
+      #                                                side by side
+      # They are the exact frames that became video frame 0 and frame
+      # N-1, so a keyframe and the video can never disagree. Written for
+      # eyeballing an episode without opening the mp4, and usable as a
+      # goal/init conditioning image at training time.
+      keyframes:
+        enabled: true
+        jpeg_quality: 95
+
+        # Left-to-right order in the composite. Must name configured
+        # cameras; leave empty to use observation_cameras order.
+        composite_order: [env, wrist_front, wrist_rear]
+
+      # How many saved episodes a DELETE issued while IDLE can undo.
+      undo_depth: 1
+
+      # Appending to an existing dataset: episodes resume from the
+      # highest existing episode_NNNNNN + 1 (not count + 1, so a gap left
+      # by a deleted episode never causes an overwrite). A mismatch
+      # against the existing metadata.json -- different collect_hz,
+      # cameras, robot -- is logged as a warning and collection proceeds.
+      resume_existing: true
+
+    # ── Control interface ──────────────────────────────────────────────
+    # Already-published contract: the teleop node is a client of these.
+    record_interface:
+      command_service: /data_collection/record_command   # max_interfaces/srv/RecordCommand
+      status_topic: /data_collection/recorder_status     # max_interfaces/msg/RecorderStatus
+      status_period: 1.0
+
+    # ── Action ─────────────────────────────────────────────────────────
+    # The teleop command echoed as a topic. Carries the arm command
+    # (cartesian velocity or joint goal, per its `space` field) and the
+    # gripper command in one message.
+    #
+    # Recorded in full at collection time; which part becomes the
+    # training action is decided at lerobot-export time.
+    action:
+      name: xarm7+gripper
+      topic: /data_collection/teleop_action
+      type: max_interfaces/msg/TeleopAction
+
+    # ── Observation: cameras ───────────────────────────────────────────
+    # Keys here become the HDF5/mp4 stream names: observation.<key>.
+    # resolution [w, h]; [0, 0] keeps the source resolution.
+    observation_cameras:
+      wrist_front:
+        topic: /observation/wrist_front/color/image_raw/compressed
+        type: sensor_msgs/msg/CompressedImage
+        resolution: [640, 480]
+        rotate: 0
+      wrist_rear:
+        topic: /observation/wrist_rear/color/image_raw/compressed
+        type: sensor_msgs/msg/CompressedImage
+        resolution: [640, 480]
+        rotate: 0
+      env:
+        # NOTE: the source spec pointed this at wrist_front's topic.
+        # Corrected to the env camera, which is live at 640x480.
+        topic: /observation/env/color/image_raw/compressed
+        type: sensor_msgs/msg/CompressedImage
+        resolution: [640, 480]
+        rotate: 0
+
+    # ── Observation: manipulator ───────────────────────────────────────
+    # eef_pose/eef_twist come from xarm_state_publisher, which solves FK
+    # from /xarm/joint_states (150 Hz) and applies the controller's TCP
+    # offset. Both are published in the `xarm_base` frame -- the same
+    # frame the teleop cartesian velocity command uses, so a recorded
+    # observation and a recorded action describe the same axes.
+    observation_manipulator:
+      name: xarm7
+      joint:
+        topic: /xarm/joint_states
+        type: sensor_msgs/msg/JointState
+        # Recorded in this order; a joint missing from the message is an
+        # error at START rather than a silent zero.
+        joint_names:
+          - joint1
+          - joint2
+          - joint3
+          - joint4
+          - joint5
+          - joint6
+          - joint7
+        record_velocity: true
+        # Arm effort is published but not recorded -- only the gripper's
+        # effort is wanted (see observation_gripper).
+        record_effort: false
+      eef_position:
+        topic: /xarm/eef_pose
+        type: geometry_msgs/msg/PoseStamped
+        # Stored exactly as published: position (x,y,z) in metres and the
+        # raw quaternion (qx,qy,qz,qw). No re-encoding at collection time
+        # -- HDF5 is the working format, and rot6d/euler are a training
+        # concern, applied by the lerobot exporter.
+        expected_frame_id: xarm_base
+      eef_velocity:
+        topic: /xarm/eef_twist
+        type: geometry_msgs/msg/TwistStamped
+        expected_frame_id: xarm_base
+
+    # ── Observation: gripper ───────────────────────────────────────────
+    # Two separate recorded streams:
+    #   observation.gripper_position -- continuous 0..1 as published,
+    #       NOT binarised. The commanded 1/0 lives on the action side
+    #       (TeleopAction.gripper_width_percent); this is where the
+    #       fingers actually are, which differs whenever a part is held.
+    #   observation.gripper_effort  -- normalised to 0..1 by the range
+    #       below, so it sits on the same scale as everything else.
+    #
+    # Effort reads slightly negative when the gripper is idle (measured
+    # -23..-16); that is sensor noise around zero, not a direction, so it
+    # is clamped to 0 before normalising. A firm grasp reads ~600, which
+    # is what maps to 1.0.
+    observation_gripper:
+      name: dxl_parallel_gripper
+      topic: /dxl_parallel_gripper/joint_states
+      type: sensor_msgs/msg/JointState
+      joint_name: finger_joint
+
+      position:
+        field: position         # continuous 0.0 (closed) .. 1.0 (open)
+
+      effort:
+        field: effort
+        # Clamped to [effort_min, effort_max], then mapped onto 0..1.
+        # Negative readings are noise and land on 0.0; ~600 is a firm
+        # grasp and lands on 1.0.
+        effort_min: 0.0
+        effort_max: 600.0
+        clip: true
+        record_raw: true        # keep the unnormalised value too

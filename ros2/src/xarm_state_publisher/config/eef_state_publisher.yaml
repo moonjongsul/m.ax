@@ -1,0 +1,68 @@
+eef_state_publisher:
+  ros__parameters:
+    # ------------------------------------------------------------------
+    # Inputs
+    #
+    # joint_states_topic: subscribe to the DRIVER's topic, not the
+    #   aggregated /joint_states. joint_state_publisher relays that one at
+    #   its own `rate` parameter (10 Hz by default), which would throttle
+    #   this node to 10 Hz for no reason -- the driver publishes at ~100 Hz.
+    # ------------------------------------------------------------------
+    joint_states_topic: /xarm/joint_states
+    robot_states_topic: /xarm/robot_states
+
+    # ------------------------------------------------------------------
+    # Outputs -- both are published on every input sample, sharing the
+    # incoming header.stamp so they align with each other and with every
+    # other recorded stream.
+    # ------------------------------------------------------------------
+    pose_topic: /xarm/eef_pose
+    twist_topic: /xarm/eef_twist
+
+    # ------------------------------------------------------------------
+    # Kinematic chain
+    #
+    # The xArm URDF ends at the flange (link_eef). The TCP is an offset
+    # from it that lives only in the controller, so it is applied on top
+    # of the chain rather than being part of it.
+    # ------------------------------------------------------------------
+    base_link: link_base
+    flange_link: link_eef
+
+    # ------------------------------------------------------------------
+    # Base frame
+    #
+    # The controller's base frame is rotated -90 deg about Z relative to
+    # the URDF's link_base: the same arm pose reads x=+248mm through the
+    # URDF and y=-248mm in RobotMsg.pose. Rotating the output here makes
+    # it agree with RobotMsg.pose and with the frame the teleop velocity
+    # command is given in, so a recorded action and a recorded
+    # observation describe the same axes.
+    #
+    # Set base_yaw_offset_deg to 0.0 to publish in the URDF link_base
+    # frame instead -- that is the frame /tf and the camera extrinsics
+    # use, so pick that if the observations are consumed alongside them.
+    #
+    # frame_id only names the frame; it does not change the numbers. Keep
+    # it consistent with base_yaw_offset_deg: "xarm_base" for the
+    # controller frame, "link_base" when the offset is 0.
+    # ------------------------------------------------------------------
+    base_yaw_offset_deg: -90.0
+    frame_id: xarm_base
+
+    # ------------------------------------------------------------------
+    # TCP offset
+    #
+    # use_reported_offset: take the offset the controller publishes in
+    #   RobotMsg.offset. Preferred, because a value written here can drift
+    #   out of sync with what the arm is actually using -- and then the
+    #   recorded observation quietly stops matching the commanded action.
+    #
+    # tcp_offset: fallback, used until the first robot_states arrives (it
+    #   is only 5 Hz on report_type "normal") and whenever
+    #   use_reported_offset is false. Must match the teleop node's
+    #   tcp.offset.
+    # ------------------------------------------------------------------
+    use_reported_offset: true
+    tcp_offset: [0.0, 0.0, 185.0, 0.0, 0.0, 0.0]
+    tcp_offset_units: mm
