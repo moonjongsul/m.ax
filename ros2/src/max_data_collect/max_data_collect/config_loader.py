@@ -24,7 +24,7 @@ DEFAULTS = {
     },
     "storage": {
         "data_format": "hdf5",
-        "video_codec": "hevc_nvenc",
+        "video_codec": "h264_nvenc",
         "video_cq": 28,
         "video_preset": "p4",
         "async_save": True,

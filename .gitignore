@@ -164,3 +164,4 @@ outputs/
 
 # Dev folders
 .cache/*
+.proxy_cache/

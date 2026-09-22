@@ -33,6 +33,13 @@ class VideoWriter:
         # Quality flag differs between the NVENC and software encoders.
         cmd += (["-cq", str(cq), "-preset", preset] if codec.endswith("_nvenc")
                 else ["-crf", str(cq)])
+        # H.264 is written to be played in a browser (the editor and the
+        # LeRobot visualizer both use a <video> element), so ask for the
+        # profile players expect and move the moov atom to the front -- a
+        # trailing moov makes a player download the whole file before the
+        # first frame appears.
+        if codec in ("h264_nvenc", "libx264"):
+            cmd += ["-profile:v", "high", "-movflags", "+faststart"]
         cmd.append(str(path))
 
         self._proc = subprocess.Popen(

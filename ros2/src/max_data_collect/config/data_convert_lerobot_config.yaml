@@ -1,0 +1,121 @@
+lerobot:
+  version: 3.0
+  robot_type: xarm7
+  gripper_type: parallel-jaw gripper
+
+merge_target_dir: /workspace/m.ax/datasets/xarm7
+
+# ── Video ────────────────────────────────────────────────────────────
+# The converter hands LeRobot the recorder's finished mp4s instead of
+# re-encoding decoded frames, which is what makes a conversion take minutes
+# rather than hours. `codec` decides whether those files are passed through
+# untouched or re-encoded on the way.
+#
+#   copy  : stream-copy, bit-identical pixels, no cost. Correct only if the
+#           recorder's codec is one your consumers can actually decode.
+#   h264  : re-encode to H.264. Slower and lossy (a second generation on top
+#           of the recorder's), but no major browser decodes HEVC in a <video>
+#           element, so an HEVC dataset plays in neither the LeRobot
+#           visualizer nor on the Hub for anyone you share it with.
+#
+# Frame COUNT is preserved exactly either way -- frame i of a video stays row
+# i of the HDF5, which every subtask boundary depends on. The converter
+# verifies this per file and aborts on a mismatch rather than shipping a
+# dataset whose labels point at the wrong frames.
+video:
+  codec: h264           # copy | h264
+  encoder: h264_nvenc   # falls back to libx264 when NVENC is unavailable
+  nvenc_cq: 26          # quality: lower = bigger + better
+  nvenc_preset: p4
+  x264_crf: 23
+  x264_preset: veryfast
+      
+# `names` labels the columns of a concatenated vector, in order. LeRobot puts
+# it in meta/info.json, which is what makes a column readable as `wx` instead
+# of `4` in the visualizer -- but it is not only cosmetic: converting a policy's
+# output tensor back into a robot action indexes `features["action"]["names"]`
+# (see lerobot/policies/utils.py), so these strings are an interface. Renaming
+# one later breaks checkpoints trained against the old name.
+#
+# The converter checks the length against the real HDF5 width and refuses to
+# run on a mismatch: a silently misaligned name trains a policy on the wrong
+# axis. Omit `names` to leave a vector unlabelled (LeRobot's `null`).
+#
+# Axis order is not a choice here -- it is whatever the recorder wrote:
+#   eef_velocity / cartesian_velocity  geometry_msgs/Twist: linear xyz then
+#                                      angular xyz, so [vx vy vz wx wy wz].
+#                                      `w` is omega, the angular VELOCITY --
+#                                      unrelated to a quaternion's `qw`, and
+#                                      not roll/pitch/yaw, which are angles.
+#   eef_position                       [x, y, z]
+#   eef_orientation                    ROS quaternion order [qx, qy, qz, qw]
+#   eef_rot6d                          COLUMN-major: the rotation matrix's
+#                                      first column then its second, i.e.
+#                                      [r11 r21 r31 r12 r22 r32]. See
+#                                      collector/rotation.py:quat_to_rot6d.
+#   gripper                            always last, appended by the source list
+
+# action
+action: 
+  main:
+    # if multiple source: [action.cartesian_velocity, action.gripper]
+    source: action.cartesian_velocity, action.gripper
+    rename: action
+    names: [vx, vy, vz, wx, wy, wz, gripper]
+
+observation:
+  state: 
+    main:
+      source: observation.eef_velocity, observation.gripper_position
+      rename: observation.state
+      names: [vx, vy, vz, wx, wy, wz, gripper]
+    eef_rot6d:
+      source: observation.eef_position, observation.eef_rot6d, observation.gripper_position
+      rename: observation.state.eef_rot6d
+      names: [x, y, z, r11, r21, r31, r12, r22, r32, gripper]
+    eef_quat:
+      source: observation.eef_position, observation.eef_orientation, observation.gripper_position
+      rename: observation.state.eef_quat
+      names: [x, y, z, qx, qy, qz, qw, gripper]
+  images:
+    wrist_front:
+      source: wrist_front.mp4
+      rename: observation.images.wrist_front
+    wrist_rear:
+      source: wrist_rear.mp4
+      rename: observation.images.wrist_rear
+    env:  
+      source: env.mp4
+      rename: observation.images.env
+    
+# Per-frame scalar columns. A value naming an HDF5 dataset is read from it;
+# a bare number is written as a constant for every frame.
+# Stored as `observation.<key>`.
+metadata:
+  # Episode quality score. Read from the editor's edits.json `score`; the value
+  # here is only the fallback for an episode with no sidecar.
+  score: 1.0
+  time_left: time_left  # seconds until the episode ends
+  # NOTE: stored as `observation.timestamp_raw`, not `timestamp`.
+  # LeRobot owns the top-level `timestamp` and uses it to index video frames,
+  # so it must sit exactly on the i/fps grid. The recorded clock drifts from
+  # that grid (median 0.6 ms, worst 18.5 ms -- every episode exceeds LeRobot's
+  # 1e-4 s tolerance), which would break frame lookup. The converter writes
+  # i/fps for `timestamp` and keeps this raw clock alongside it.
+  timestamp: timestamp
+
+# Segment labels produced by the editor (max_data_editor), read from each
+# episode's edits.json `segments` -- NOT from the HDF5 datasets of the same
+# name, which the recorder leaves at -1/NaN because the editor only ever writes
+# the sidecar. Stored as `subtask_<key>`; frames no segment covers keep index
+# -1 and score -1.0, the -1.0 standing in for NaN so dataset statistics stay
+# clean. The values below are column names only; there is nothing to re-point.
+#
+# The converter also writes two metadata tables from the same segments:
+#   meta/subtasks.parquet             sentence prompt per subtask_index
+#   meta/episodes/*.parquet           sparse_subtask_* (short keys, for SARM
+#                                     and the visualizer's subtask timeline)
+subtask:
+  index: subtask_index
+  score: subtask_score
+

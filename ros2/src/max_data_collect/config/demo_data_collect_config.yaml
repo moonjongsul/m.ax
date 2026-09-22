@@ -20,15 +20,7 @@ max_data_collect:
 
     output_dir: /workspace/m.ax/datasets
     dataset_name: kitting_dataset_xarm7_pick_kit_260826
-    # ── Task / prompts ─────────────────────────────────────────────────
-    # Episode-level values. Written once into the HDF5 `/meta` group,
-    # NOT repeated per frame -- goal_image alone would be ~84 MB of the
-    # same JPEG over a 40 s episode. The lerobot exporter broadcasts them
-    # to per-frame columns at conversion time.
-    #
-    # `subgoal` is left empty here on purpose: it is segment-scoped
-    # (pi-0.7 style) and gets filled in by the editing GUI, not at
-    # collection time.
+    # ── Task / prompts ───────────────────────────────────────────────
     task:
       # main_prompt: "grasp the black plastic object, flip it upside down, pick it up"   # flip & pick 
       # main_prompt: "pick up the black plastic object"   # pick
@@ -38,35 +30,13 @@ max_data_collect:
 
       goal_image: ""          # path to a goal frame; filled in by hand later
       total_score: 1.0        # episode-level score, editable later
-
-      # Sliding-window length used when labelling subgoals, in SECONDS so
-      # it stays meaningful if collect_hz ever changes
-      # (segment_frames = round(segment_sec * collect_hz)).
-      #
-      # Windows are stride-1, so window i starts at frame i and segment
-      # index == frame index. That is why nothing segment-shaped is
-      # stored: the label for window i is written straight onto frame i
-      # as `subtask_index` / `subtask_score`. This value is recorded in
-      # tasks.json purely as a hint for the editing GUI.
-      segment_sec: 1.0
+      segment_sec: 3.0
 
     # ── Recording ──────────────────────────────────────────────────────
     recording:
-      # Sampling rate of the recorder loop. One HDF5 row per tick.
-      # Sources faster than this are downsampled (latest wins); slower
-      # ones repeat their last value -- the gripper at ~21 Hz does this
-      # and that is accepted.
       collect_hz: 30.0
-
-      # Discard the first N seconds after START. Lets the operator settle
-      # and lets every stream come up before the first row is kept.
       warmup_sec: 1.0
-
-      # A source with no new message for this long is flagged stale in
-      # the recorded row. Not fatal -- the last value is held.
       staleness_timeout: 1.0
-
-      # Refuse to START while any configured source has never published.
       require_all_sources: true
 
       # Frames are handed to the writer through a queue so disk latency
@@ -77,13 +47,6 @@ max_data_collect:
 
     # ── QoS ────────────────────────────────────────────────────────────
     # Every observation/action source is subscribed BEST_EFFORT.
-    #
-    # This is not a preference, it is a compatibility requirement: the
-    # action and EEF topics are published BEST_EFFORT, and a RELIABLE
-    # subscriber does NOT connect to a BEST_EFFORT publisher -- it simply
-    # receives nothing, with no error. The reverse direction is fine, so
-    # one BEST_EFFORT subscriber works for every source here (verified
-    # against the RELIABLE joint/gripper/camera publishers).
     qos:
       reliability: best_effort
       depth: 10
@@ -93,40 +56,31 @@ max_data_collect:
       # Per-episode HDF5 for states, one mp4 per camera alongside it.
       data_format: hdf5
 
-      # hevc_nvenc measured 0.8 KB/frame at 19.6x realtime on this Tegra;
-      # libsvtav1 only reaches 1.0x, too slow for 3 cameras at 30 Hz.
-      video_codec: hevc_nvenc
+      # h264_nvenc, not hevc_nvenc: no major browser decodes HEVC in a
+      # <video> element, so HEVC episodes play in neither the LeRobot
+      # visualizer nor the dataset editor without a transcoding detour.
+      # H.264 costs roughly 30-40% more bytes per frame at the same cq and
+      # is still far faster than realtime here (libsvtav1 only reaches 1.0x,
+      # too slow for 3 cameras at 30 Hz).
+      #
+      # Episodes already recorded as HEVC stay as they are -- they are valid
+      # and correctly aligned; convert_to_lerobot.py transcodes on the way
+      # out. Only newly recorded episodes are affected by this setting.
+      video_codec: h264_nvenc
       video_cq: 28            # quality: lower = bigger + better
       video_preset: p4
 
       # Write the episode in a background thread so SAVE returns at once.
       async_save: true
 
-      # Keyframes: the first kept frame (right after warmup) and the last
-      # one before STOP, saved as JPEGs next to the mp4s:
-      #     start_<camera>.jpg / end_<camera>.jpg   -- one per camera
-      #     start_composite.jpg / end_composite.jpg -- the same frames
-      #                                                side by side
-      # They are the exact frames that became video frame 0 and frame
-      # N-1, so a keyframe and the video can never disagree. Written for
-      # eyeballing an episode without opening the mp4, and usable as a
-      # goal/init conditioning image at training time.
       keyframes:
         enabled: true
         jpeg_quality: 95
 
-        # Left-to-right order in the composite. Must name configured
-        # cameras; leave empty to use observation_cameras order.
         composite_order: [env, wrist_front, wrist_rear]
 
       # How many saved episodes a DELETE issued while IDLE can undo.
       undo_depth: 1
-
-      # Appending to an existing dataset: episodes resume from the
-      # highest existing episode_NNNNNN + 1 (not count + 1, so a gap left
-      # by a deleted episode never causes an overwrite). A mismatch
-      # against the existing metadata.json -- different collect_hz,
-      # cameras, robot -- is logged as a warning and collection proceeds.
       resume_existing: true
 
     # ── Control interface ──────────────────────────────────────────────
@@ -137,12 +91,6 @@ max_data_collect:
       status_period: 1.0
 
     # ── Action ─────────────────────────────────────────────────────────
-    # The teleop command echoed as a topic. Carries the arm command
-    # (cartesian velocity or joint goal, per its `space` field) and the
-    # gripper command in one message.
-    #
-    # Recorded in full at collection time; which part becomes the
-    # training action is decided at lerobot-export time.
     action:
       name: xarm7+gripper
       topic: /data_collection/teleop_action
@@ -171,11 +119,6 @@ max_data_collect:
         rotate: 0
 
     # ── Observation: manipulator ───────────────────────────────────────
-    # eef_pose/eef_twist come from xarm_state_publisher, which solves FK
-    # from /xarm/joint_states (150 Hz) and applies the controller's TCP
-    # offset. Both are published in the `xarm_base` frame -- the same
-    # frame the teleop cartesian velocity command uses, so a recorded
-    # observation and a recorded action describe the same axes.
     observation_manipulator:
       name: xarm7
       joint:

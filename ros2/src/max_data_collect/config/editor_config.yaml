@@ -1,0 +1,153 @@
+# max_data_collect -- dataset editor (max_data_editor) settings.
+#
+# Plain YAML, NOT a ROS parameter file: the editor is a standalone FastAPI
+# app, so there is no `ros__parameters:` root here and rclpy never reads it.
+#
+# Resolution order for every setting:
+#   command-line flag  >  this file  >  built-in default
+#
+# Load a different file with:  max_data_editor --config /path/to/editor_config.yaml
+
+# ── Dataset source ───────────────────────────────────────────────────
+dataset:
+  # Directory that holds one subdirectory per dataset (each with
+  # metadata.json + episodes/). Also editable at runtime from the
+  # "Dataset Root" box in the UI; this is only the startup value.
+  # Relative paths resolve against the repository root.
+  root: datasets/xarm7
+
+  # Dataset selected when the UI opens. Empty = first one alphabetically.
+  default_dataset: ""
+
+# ── Server ───────────────────────────────────────────────────────────
+server:
+  host: 0.0.0.0
+  # host: 10.252.216.178
+  port: 8020
+
+# ── Subtasks ─────────────────────────────────────────────────────────
+# Prompt templates for segment labelling. A key is the short `label` stored
+# on the segment (stable for stats and filtering); the value is expanded
+# into the segment `prompt` (the sentence a VLA model is conditioned on).
+#
+# Only {object} and {target} are supported, and each is filled from the
+# matching list below via a dropdown in the editor's Subtask panel. A
+# template referencing a slot whose list is empty is a startup error.
+# Keys 1-9 apply the first nine templates to the selected segment.
+subtasks:
+  approach_flip: 'approach to {object} for flip'
+  approach_pick: 'approach to {object} for pick up'
+  flip: 'flip {object} upside down'
+  pick: 'pick up {object}'
+  move: 'move {object} to {target}'
+  place: 'place {object} in {target}'
+
+objects:
+  - 'black plastic object'
+  - 'black object'
+  
+targets:
+  # - 'green tray'
+  - 'white tray'
+
+# ── Video playback ───────────────────────────────────────────────────
+# The recorder writes HEVC (storage.video_codec: hevc_nvenc). Browsers
+# generally cannot decode HEVC in a <video> element on Linux -- note that
+# system ffmpeg/libde265 codecs do NOT help, since Chrome and Firefox use
+# their own bundled decoders, not the system ones.
+#
+# When a proxy is made, the ORIGINAL mp4 is never modified and the frame
+# count is preserved exactly, so frame indices stay aligned with the HDF5.
+video:
+  # auto   : transcode only codecs the browser cannot play (default)
+  # never  : always serve the original -- use this if your browser really
+  #          does play HEVC; no transcoding, no cache written
+  # always : transcode every video regardless of codec
+  proxy: auto
+
+  # Codecs served as-is under `proxy: auto`. Add "hevc" here if your
+  # browser plays HEVC natively -- equivalent to `proxy: never` for HEVC
+  # while still converting anything more exotic.
+  playable_codecs: [h264, avc1, vp8, vp9, av1]
+
+  # Proxy cache directory, relative to each dataset directory.
+  # Safe to delete at any time; it is regenerated on demand.
+  cache_dirname: .proxy_cache
+
+  # h264_nvenc (GPU, ~1s per episode) falls back to libx264 automatically
+  # when NVENC is unavailable.
+  encoder: h264_nvenc
+  nvenc_preset: p4
+  nvenc_cq: 26
+  x264_preset: veryfast
+  x264_crf: 23
+
+# ── Timeline / plots ─────────────────────────────────────────────────
+timeline:
+  # Points per channel sent to the browser. Higher = finer detail, more
+  # transfer. Frame indexing is unaffected; this only decimates the plot.
+  max_points: 1500
+
+  # Signals drawn under the video, in order. Keys must exist in data.hdf5.
+  #
+  # reduce:
+  #   components : one trace per vector element -- joint1..joint7, x/y/z,
+  #                vx..wz. This is what you want to actually see the data.
+  #   norm       : magnitude over all components (one trace)
+  #   norm3      : magnitude of the first 3 components (one trace)
+  #   scalar     : 1-D as-is; first column only for a vector
+  #
+  # Component traces are grouped by `label` and stacked together in the UI,
+  # where each group can be collapsed or hidden.
+  channels:
+    - {key: action.gripper,                 label: gripper cmd,    reduce: components}
+    - {key: observation.gripper_position,   label: gripper pos,    reduce: components}
+    - {key: observation.gripper_effort,     label: gripper effort, reduce: components}
+    - {key: observation.gripper_effort_raw, label: gripper raw,    reduce: components}
+    - {key: observation.joint_position,     label: joint pos,      reduce: components}
+    - {key: observation.joint_velocity,     label: joint vel,      reduce: components}
+    - {key: observation.eef_position,       label: eef pos,        reduce: components}
+    - {key: observation.eef_orientation,    label: eef quat,       reduce: components}
+    - {key: observation.eef_rot6d,          label: eef rot6d,      reduce: components}
+    - {key: observation.eef_velocity,       label: eef vel,        reduce: components}
+    - {key: action.cartesian_velocity,      label: cmd vel,        reduce: components}
+
+# ── Auto-segmentation ────────────────────────────────────────────────
+# Seeds subtask boundaries for a human to refine. Gripper open/close
+# edges line up with subtask boundaries in pick-and-place; tasks that
+# push without grasping will need manual segmentation.
+autosegment:
+  # Signal whose transitions become boundaries.
+  gripper_key: action.gripper
+  # Minimum open-to-closed span (fraction of range) before edges are
+  # trusted; guards against noise on an always-open gripper.
+  gripper_min_span: 0.2
+  # Leading/trailing frames below this fraction of peak EEF speed are
+  # treated as idle and proposed for trimming.
+  idle_speed_ratio: 0.05
+  # Frames of margin kept around the detected motion span.
+  trim_margin_frames: 5
+  # Proposed segments shorter than this are discarded.
+  min_segment_frames: 5
+
+  # The raw gripper edge is not the ideal cut: the approach before a grasp
+  # and the retreat after a release belong to the neighbouring subtask.
+  # So the boundary is nudged off the edge, in SECONDS (converted to frames
+  # with the dataset's collect_hz):
+  #   close_lead_sec : open -> closed (grasp)   cut this much EARLIER
+  #   open_lag_sec   : closed -> open (release) cut this much LATER
+  # Set both to 0.0 to cut exactly on the gripper edge.
+  close_lead_sec: 0.5
+  open_lag_sec: 1.0
+
+# ── Labelling ────────────────────────────────────────────────────────
+labels:
+  # Seed vocabulary for datasets with no label_vocabulary.json yet.
+  # Keeps subtask labels from fragmenting ("pick" vs "picking").
+  # Keys 1-9 apply the first nine to the selected segment.
+  default_vocabulary: [reach, grasp, lift, move, align, place, release, retreat]
+
+# ── Edit sidecars ────────────────────────────────────────────────────
+edits:
+  # Versions of edits.json kept in .edits_history/ per episode.
+  history_depth: 5
