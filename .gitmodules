@@ -1,3 +1,7 @@
 [submodule "thirdparty/lerobot"]
 	path = thirdparty/lerobot
 	url = https://github.com/moonjongsul/lerobot.git
+[submodule "ros2/src/xarm_ros2"]
+	path = ros2/src/xarm_ros2
+	url = https://github.com/xArm-Developer/xarm_ros2.git
+	branch = humble
