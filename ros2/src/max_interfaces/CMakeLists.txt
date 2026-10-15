@@ -9,18 +9,27 @@ find_package(ament_cmake REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(action_msgs REQUIRED)
+find_package(builtin_interfaces REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/InferenceStatus.msg"
   "msg/RobotStatesPackage.msg"
   "msg/RecorderStatus.msg"
   "msg/TeleopAction.msg"
+  "msg/TaskState.msg"
+  "msg/PolicyState.msg"
+  "msg/RecognitionVerdict.msg"
   "srv/RecordCommand.srv"
   "srv/UnloadPolicy.srv"
   "srv/MoveToPose.srv"
+  "srv/MakePlan.srv"
+  "srv/ReplanTask.srv"
+  "srv/ScheduleRecognition.srv"
   "action/LoadPolicy.action"
   "action/RunInference.action"
-  DEPENDENCIES std_msgs action_msgs
+  "action/RunPolicy.action"
+  "action/RunRollout.action"
+  DEPENDENCIES std_msgs action_msgs builtin_interfaces
 )
 
 if(BUILD_TESTING)

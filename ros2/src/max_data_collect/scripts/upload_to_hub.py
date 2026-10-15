@@ -158,6 +158,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--root", type=Path, required=True,
+                    default='/workspace/m.ax/datasets/lerobot/xarm7_kitting_260923', 
                     help="converted dataset directory")
     ap.add_argument("--repo-id", required=True, help="Hub repo, e.g. user/xarm7-kitting")
     ap.add_argument("--dry-run", action="store_true",

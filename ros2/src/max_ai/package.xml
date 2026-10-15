@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>max_ai</name>
+  <version>0.0.0</version>
+  <description>
+    Runs SmolVLA / MVLA checkpoints on the xArm7 kitting cell as four nodes:
+    policy inference and control, task manager, planner, and state recognizer.
+  </description>
+  <maintainer email="moonjongsul@gmail.com">keti10829</maintainer>
+  <license>Apache-2.0</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>builtin_interfaces</exec_depend>
+  <exec_depend>max_interfaces</exec_depend>
+  <!-- policy_node only. The arm is driven through xarm_api services, the same
+       path teleop uses. -->
+  <exec_depend>xarm_msgs</exec_depend>
+
+  <!-- The ament lint templates are not used: this repo's style (double
+       quotes, no per-method docstrings) fails them in every package, so
+       max_data_collect dropped them too. test/ holds real logic tests that
+       run without ROS, a GPU or the robot. -->
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

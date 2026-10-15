@@ -1,0 +1,41 @@
+# Goal + recognised scene state -> subtask sequence.
+#
+# A separate node, and a service rather than a library call, because the
+# planner is the piece most likely to be replaced. Today it is a lookup table
+# read off the demonstrations (216/217 of the operators' own sequences); the
+# intent is to swap it for a VLM without touching the manager. Keeping it
+# behind this request is what makes that a node swap instead of a rewrite.
+#
+# Called once per episode start and once per replan, so a blocking round trip
+# is fine here -- nothing in the 30 Hz path waits on it.
+
+# kit | pick | place.
+string goal
+
+# Fused object state: target | flipped | in_gripper | unknown_pose.
+#
+# Already fused by the caller, because whether the part is held is read from
+# the gripper rather than from vision -- the dataset has too few failed
+# grasps to fit a classifier, while width and effort separate "closed on
+# something" from "closed on air" by construction. That is a fact about the
+# cell's sensors, so it stays with the manager; this service answers only
+# what to do about a state once it is known.
+string state
+---
+# False when the state has no plan. That is not a retry condition: an object
+# in neither canonical pose, or a probe that abstained, needs an operator.
+# Guessing there is how a cell damages a part.
+bool success
+
+# Why there is no plan. Populated only on failure.
+string reason
+
+# Neutral goal sentence, which the policy prompt's "Task:" field gets.
+# Neutral because the recorded sentences name the method ("flip it, then pick
+# it up"), which would hand the policy the answer it is supposed to read off
+# the image.
+string task_prompt
+
+# Subtask short names, in order, starting with the one to run now. Empty with
+# success=true means the goal is already satisfied.
+string[] subtasks

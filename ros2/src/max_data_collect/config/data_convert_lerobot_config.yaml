@@ -65,18 +65,76 @@ action:
 
 observation:
   state: 
+    # `observation.state` -- what the policy actually trains on.
+    #
+    # EEF pose (position + rot6d) and joint position together, measured on
+    # 60 episodes / 73k frames of xarm7_kitting:
+    #
+    #   - Joint position is NOT recoverable from EEF pose: predicting it
+    #     linearly from the 9 EEF channels gives R^2 0.28-0.70 (mean 0.52).
+    #     The arm is 7-DoF, so the same EEF pose is reached with different
+    #     elbow configurations, and the demonstrations use that freedom.
+    #     EEF pose alone cannot express which configuration the arm is in,
+    #     which is also what tells a singularity or joint limit apart.
+    #
+    #   - Neither leaks the action. Predicting action.cartesian_velocity
+    #     from joint position gives R^2 0.02-0.09 (max |corr| 0.14).
+    #
+    # eef_velocity is deliberately NOT here, though it was the old default.
+    # It correlates with the action it is supposed to predict at 0.84-0.99
+    # per channel (0.98+ on all three rotations), and still 0.79-0.85 when
+    # lagged a frame. A policy trained on it learns to repeat its own last
+    # command instead of reading the cameras, and that shortcut collapses
+    # in rollout: once the arm stalls the state reads zero, zero predicts
+    # zero, and it never recovers. joint_velocity is left out for the same
+    # reason -- the Jacobian ties it to cartesian velocity just as tightly.
+    #
+    # rot6d rather than a quaternion: q and -q are the same rotation but
+    # different input vectors, and the sign flip is a discontinuity.
+    #
+    # gripper_position is the measured finger position, not the commanded
+    # 1/0 on the action side -- it is the only channel that says whether a
+    # part is actually held. gripper_effort adds contact.
+    #
+    # 18 channels, well inside SmolVLA's max_state_dim (32), so this only
+    # reduces padding. Scales differ (joints ~0.34-0.74 rad vs position
+    # ~0.05-0.07 m), so the policy's normalization for observation.state
+    # must be MEAN_STD or MIN_MAX -- with IDENTITY the joints swamp the
+    # position channels.
     main:
-      source: observation.eef_velocity, observation.gripper_position
+      source: observation.eef_position, observation.eef_rot6d, observation.joint_position, observation.gripper_position, observation.gripper_effort
       rename: observation.state
-      names: [vx, vy, vz, wx, wy, wz, gripper]
+      names: [x, y, z, 
+              r11, r21, r31, r12, r22, r32,
+              j1, j2, j3, j4, j5, j6, j7,
+              gripper, 
+              gripper_effort]
+
+    # ── Alternatives, carried for ablation and diagnostics ────────────
+    # Each lands in its own column; none of these is `observation.state`.
+    eef_velocity:
+      source: observation.eef_velocity, observation.gripper_position, observation.gripper_effort
+      rename: observation.state.eef_velocity
+      names: [vx, vy, vz, wx, wy, wz, gripper, gripper_effort]
     eef_rot6d:
-      source: observation.eef_position, observation.eef_rot6d, observation.gripper_position
+      source: observation.eef_position, observation.eef_rot6d, observation.gripper_position, observation.gripper_effort
       rename: observation.state.eef_rot6d
-      names: [x, y, z, r11, r21, r31, r12, r22, r32, gripper]
+      names: [x, y, z, r11, r21, r31, r12, r22, r32, gripper, gripper_effort]
     eef_quat:
-      source: observation.eef_position, observation.eef_orientation, observation.gripper_position
+      source: observation.eef_position, observation.eef_orientation, observation.gripper_position, observation.gripper_effort
       rename: observation.state.eef_quat
-      names: [x, y, z, qx, qy, qz, qw, gripper]
+      names: [x, y, z, qx, qy, qz, qw, gripper, gripper_effort]
+    # Joint space. `main` already carries joint_position alongside the EEF
+    # pose; these isolate it, for a joint-only ablation and for diagnosing
+    # kinematics (singularities and joint limits are invisible in EEF pose).
+    joint_position:
+      source: observation.joint_position, observation.gripper_position, observation.gripper_effort
+      rename: observation.state.joint_position
+      names: [j1, j2, j3, j4, j5, j6, j7, gripper, gripper_effort]
+    joint_velocity:
+      source: observation.joint_velocity, observation.gripper_position, observation.gripper_effort
+      rename: observation.state.joint_velocity
+      names: [j1, j2, j3, j4, j5, j6, j7, gripper, gripper_effort]
   images:
     wrist_front:
       source: wrist_front.mp4

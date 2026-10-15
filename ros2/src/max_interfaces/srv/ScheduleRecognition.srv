@@ -1,0 +1,46 @@
+# Ask the recognizer to judge the scene at specific future instants.
+#
+# The times are the request, not the images. The recognizer subscribes to the
+# cameras itself and captures at the scheduled instants; the manager sends
+# only when and what to look for.
+#
+# It is built this way because the capture instant is load-bearing. The
+# probes were trained on frames at fixed offsets from a boundary -- mat at
+# +3/12/21 frames after a flip run begins, tray at +8/18/28 after the gripper
+# opens -- and a verdict from a different instant judges a scene the probe
+# never saw. Shipping images in the request would also put three 640x480
+# frames into a service call at a boundary the control loop is crossing.
+
+# See RecognitionVerdict for the purposes. The probe follows from it:
+# start and flip use `mat`, place uses `tray`.
+uint8 purpose
+
+# Capture offsets from `reference`, in seconds. The manager converts the
+# recognizer config's frame offsets using the control fps, so the one place
+# that knows the fps is the one that owns it.
+float32[] offsets_s
+
+# Instant the offsets are measured from -- the boundary itself (the release,
+# the flip transition, the episode start). Zero means "now, as the recognizer
+# receives this". Scheduling off a stamp the manager chose, rather than off
+# arrival, keeps the queueing delay out of the capture times.
+builtin_interfaces/Time reference
+
+# Drop any captures still pending from earlier requests before scheduling
+# these. Set on a replan: verdicts for a subtask the plan has abandoned
+# arrive late and would be applied to the wrong boundary.
+bool cancel_pending
+---
+# False when no recognizer model is loaded, or when an offset has already
+# passed by more than the recognizer's tolerance. The manager runs without
+# verification in that case rather than waiting for a verdict that is not
+# coming.
+bool success
+string message
+
+# Echoed into every resulting RecognitionVerdict.
+uint32 request_id
+
+# How many captures were actually scheduled. The manager aggregates after
+# this many verdicts arrive.
+uint8 scheduled

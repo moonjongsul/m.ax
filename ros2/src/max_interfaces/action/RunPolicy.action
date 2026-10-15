@@ -1,0 +1,64 @@
+# Hand the arm to a policy for one episode.
+#
+# The goal is held for the whole episode: while it is active the policy node
+# owns the 30 Hz loop, the safety limits and the robot command path, and it
+# drives whatever prompt the manager is publishing on TaskState. Cancelling
+# the goal stops the arm.
+#
+# An action rather than a start/stop service pair because the thing being
+# asked for is long-running and has an outcome. The caller gets the
+# cancellation path and the "who owns the arm right now" answer for free;
+# with two Triggers both have to be rebuilt, and a caller that dies between
+# them leaves the arm running.
+#
+# Only one goal is accepted at a time. A second is rejected rather than
+# queued -- there is one arm, and a queued episode would start whenever the
+# first happened to end.
+
+# Checkpoint to run. Empty uses the one the node was configured with. A
+# different path triggers a load, which takes seconds and is reported through
+# feedback before the episode starts.
+string checkpoint
+
+# Overrides the configured speed_scale when > 0. Every velocity is multiplied
+# by it. First runs on hardware belong at 0.3 or below.
+float32 speed_scale
+
+# Episode wall-clock limit, seconds. <= 0 uses the configured
+# max_episode_s. On expiry the policy aborts itself and zeroes the arm.
+float32 max_episode_s
+
+# For SmolVLA, the task sentence to run, exactly as trained. Ignored for
+# MVLA, whose prompt comes from the manager through TaskState -- an MVLA
+# prompt is assembled per subtask and cannot be fixed at goal time.
+string task_instruction
+---
+# False when the episode ended any way other than the manager or the caller
+# stopping it cleanly: a load failure, a lost observation stream, the
+# episode timeout, or the TaskState deadman.
+bool success
+
+# Terminal state and reason, mirroring the last PolicyState.
+uint8 state
+string reason
+
+# Control ticks executed, and how many of them sent a nonzero velocity.
+# A large gap between the two means the episode spent its time held at zero
+# by a safety limit or a stale observation.
+uint32 ticks
+uint32 moving_ticks
+
+# Where the per-tick log was written (one JSON object per line: command,
+# action, flags, head values, events). Empty if logging was off.
+string log_path
+---
+# Loading stages before the episode starts: "loading" | "ready", then
+# "running". Rate-limited to ~5 Hz once running; PolicyState carries the
+# full per-tick detail.
+string stage
+
+uint8 state
+float32 elapsed_s
+int32 chunk_index
+float32 latency_s
+float32 value_episode

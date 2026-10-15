@@ -12,6 +12,10 @@ datasets/
 ros2/build/
 ros2/install/
 ros2/log/
+datasets_*
+*.pdf
+rollout_logs/
+log/
 
 thirdparty/physical_ai_tools/
 # Lock files

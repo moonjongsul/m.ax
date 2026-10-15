@@ -1,0 +1,98 @@
+# Run one kitting task, top to bottom. This is the operator's entry point.
+#
+# The manager takes it from here: decide the starting scene state, get a plan,
+# drive the policy through the plan's subtasks, verify the boundaries the
+# recognizer can verify, retry what fails, and decide when the goal has been
+# reached. The caller supplies a goal name and gets a report.
+#
+# An action because an episode is long-running, is worth watching, and is
+# worth cancelling. The result is the completion report -- the thing that
+# says whether this rollout is a success to learn from.
+
+# kit | pick | place. The goal decides the plan, and the plan decides where
+# the task ends: a `pick` goal finishes at `pick`, a `kit` goal at `place`.
+#
+# This is the one field that makes the ending move. The value head predicts
+# the end of an episode well but reads the same whichever goal sentence it is
+# given (-0.383 vs -0.385 on the same frames), so the goal has to reach the
+# ending through the plan, not through the prompt.
+string goal
+
+# Force the starting scene state instead of deciding it: target | flipped |
+# in_gripper. Empty uses the configured mode (recognizer, or the subtask head
+# when no recognizer is loaded). A held part is detected from gripper effort
+# first either way.
+string initial_state
+
+# Passed through to the policy. <= 0 uses the configured value.
+float32 speed_scale
+float32 max_episode_s
+
+# Record this rollout through the data collector (START on begin, SAVE on
+# end, including failures -- a failed rollout is the next training batch and
+# the material for advantage estimation). Default comes from the config; set
+# `override_record` to use this field instead.
+bool record
+bool override_record
+---
+# True only when the goal was reached. A rollout that was stopped, timed out,
+# or ran out of retries reports false and still carries a full report.
+bool success
+
+# done | stopped | aborted | needs_operator
+string outcome
+
+# Why it ended. For needs_operator this is what the operator has to resolve.
+string reason
+
+# What decided the task was finished:
+#   recognizer_tray    -- tray probe said ok, twice (a kit goal)
+#   last_subtask_value -- value head crossed the threshold N times in a row
+#                         (a pick goal, or no recognizer loaded)
+#   unverified         -- the policy finished `place` but the release was
+#                         never seen, so completion timed out without a check
+#   already_satisfied  -- the goal held at episode start
+# Empty when the task did not complete.
+string basis
+
+# Scene state the plan was built for, and the mat verdict behind it.
+string initial_state
+
+# The main prompt the goal resolved to.
+string main_prompt
+
+float32 duration_s
+
+# Per-subtask trace as JSON: [{name, t_start, t_end, outcome, verdict}].
+# JSON rather than a message array because the verdict is a probe-dependent
+# probability map, and this is a record to file with the episode, not
+# something a node branches on.
+string subtasks_json
+
+# Full report as JSON, the same object published on the manager's
+# task_complete topic.
+string completion_json
+
+# Retry counts per subtask, as parallel arrays.
+string[] retry_subtasks
+uint32[] retry_counts
+---
+# Live progress, ~1 Hz and on every state change.
+string goal_state
+string subtask
+string[] remaining
+bool on_last_subtask
+float32 subtask_elapsed_s
+float32 task_elapsed_s
+
+# Consecutive hits of the completion condition on the last subtask. Visible
+# because it is what the task is waiting on at the end.
+uint32 completion_streak
+uint32 total_retries
+
+float32 value_subtask
+float32 value_episode
+
+# Last event, as the manager logged it: "advance: pick -> move",
+# "verdict: place: bad", "replan: place -> approach_pick (...)".
+string event

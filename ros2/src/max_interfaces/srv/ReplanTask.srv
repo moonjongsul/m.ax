@@ -1,0 +1,34 @@
+# Where to resume after a subtask failed its verification.
+#
+# A failed manipulation is retried by re-approaching, never by repeating the
+# manipulation from where it broke -- that is what the operators did in all
+# 92 recovered failures in the dataset. Failures at the tray resume at the
+# tray (approach_pick, pick, place) with no `move` in between, because that
+# is the recovery the demonstrations actually contain; planning a `move`
+# there leaves the runtime waiting for a subtask nobody performs.
+#
+# The retry budget is the manager's, not the planner's. This answers only
+# "what sequence comes next", so a planner swap cannot quietly change how
+# many times the cell will re-grab a part.
+
+string goal
+
+# Object state the current plan was made for, as MakePlan returned it.
+string state
+
+# Neutral goal sentence from the current plan, carried through unchanged.
+string task_prompt
+
+# The plan as it stands, starting with the subtask that was running. Needed
+# because a tray retry is recognised by its shape: a `pick` whose remaining
+# plan still has `place` but no `move` is itself already a tray retry.
+string[] current_subtasks
+
+# Subtask that did not achieve its goal.
+string failed_subtask
+---
+bool success
+string reason
+
+# Sequence to resume with, starting with the subtask to run now.
+string[] subtasks
