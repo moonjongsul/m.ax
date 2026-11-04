@@ -10,8 +10,9 @@
 변환으로 펴서 90° 반시계로 돌린 640x480을 내보낸다. `scripts/tray_span`을
 노드로 옮긴 것이다.
 
-**모서리 추적.** 카메라가 조금씩 움직여도 모서리를 따라가도록 기준 이미지와
-ORB 특징점을 매칭해 호모그래피를 구한다. 특징점은 트레이 테두리 둘레에서만
+**모서리.** `tray_tracking: false`(기본)면 설정의 `ref_corners` 4점을 그대로
+쓴다 -- 카메라를 고정했으면 이걸로 충분하다. `true`면 카메라가 조금씩 움직여도
+모서리를 따라가도록 기준 이미지와 ORB 특징점을 매칭해 호모그래피를 구한다. 특징점은 트레이 테두리 둘레에서만
 뽑는다 -- 포켓 안은 부품이 들어가면서 바뀌고, 로봇은 매 프레임 다르다.
 매칭이 부족하면 직전 모서리를 그대로 쓴다.
 
@@ -159,7 +160,7 @@ class EnvTraySpanNode(Node):
 
         self.tracker = None
         self.fixed_corners = corners
-        if p["tracking"]:
+        if p["tray_tracking"]:
             ref_path = resolve_path(p["ref_image"])
             ref = cv2.imread(ref_path, cv2.IMREAD_COLOR)
             if ref is None:
@@ -174,7 +175,7 @@ class EnvTraySpanNode(Node):
             )
             self.get_logger().info(f"tracking against {ref_path} ({len(self.tracker.ref_kp)} features)")
         else:
-            self.get_logger().info("tracking off: fixed corners")
+            self.get_logger().info(f"tray_tracking off: fixed corners {corners.reshape(-1).tolist()}")
 
         qos = sensor_qos(p["qos_depth"])
         self.pub = self.create_publisher(CompressedImage, p["output_topic"], qos)
@@ -197,7 +198,7 @@ class EnvTraySpanNode(Node):
             "ref_corners": [392.0, 119.0, 562.0, 133.0, 603.0, 307.0, 382.0, 321.0],
             "proc_width": 640,
             "proc_height": 480,
-            "tracking": True,
+            "tray_tracking": False,
             "n_features": 1500,
             "margin": 60.0,
             "inner_shrink": 0.12,
