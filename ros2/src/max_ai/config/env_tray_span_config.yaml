@@ -1,0 +1,36 @@
+# max_ai_env_tray_span 파라미터. ROS 파라미터 파일 형식이라 --params-file이나
+# launch의 parameters=[...]로 넘긴다. 실수 파라미터는 꼭 소수점을 붙일 것 --
+# 정수로 쓰면 타입이 달라 노드가 뜨지 않는다.
+max_ai_env_tray_span:
+  ros__parameters:
+    # ───────────────────────── 토픽
+    input_topic: /observation/env/color/image_raw/compressed
+    output_topic: /observation/env_tray/color/image_raw/compressed
+    qos_depth: 1                      # BEST_EFFORT. 밀린 프레임은 버린다
+    publish_debug: false              # 입력 위에 모서리를 그린 영상 (초록 = 추적 중, 빨강 = 놓침)
+    debug_topic: /observation/env_tray/debug/compressed
+
+    # ───────────────────────── 기준
+    # 상대 경로는 설치된 share/max_ai/config 기준
+    ref_image: env_img.png
+    # 기준 이미지에서 트레이 윗면 모서리 (x, y): TL, TR, BR, BL
+    ref_corners: [392.0, 119.0, 562.0, 133.0, 603.0, 307.0, 382.0, 321.0]
+    # 모서리 좌표계 = 기준 이미지 크기. 입력은 추적 전에 이 크기로 줄인다
+    proc_width: 640
+    proc_height: 480
+
+    # ───────────────────────── 추적
+    tracking: true                    # false면 ref_corners로 고정해서 펴기만 한다
+    n_features: 1500                  # ORB 특징점 수
+    margin: 60.0                      # px. 트레이 바깥으로 특징점을 뽑을 폭
+    inner_shrink: 0.12                # 트레이 안쪽 제외 비율 (포켓 내용물은 바뀐다)
+    min_inliers: 25                   # 호모그래피를 믿을 최소 인라이어 수
+    max_jump: 40.0                    # px. 직전보다 이만큼 넘게 튀면 바로 받지 않는다
+    smooth: 0.5                       # 0 = 평활 없음, 1에 가까울수록 느리게 따라감
+    relock_frames: 10                 # 튄 추정이 이만큼 연속 일치하면 새 위치로 재고정. 0 = 안 함
+
+    # ───────────────────────── 출력
+    out_width: 640
+    out_height: 480
+    out_rotate: ccw                   # ccw | cw | 180 | none
+    jpeg_quality: 90

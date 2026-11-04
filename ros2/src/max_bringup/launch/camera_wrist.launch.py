@@ -8,6 +8,7 @@ from launch.actions import (
     IncludeLaunchDescription,
     TimerAction,
 )
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -19,6 +20,12 @@ def generate_launch_description():
         "video_domain_id",
         default_value="0",
         description="ROS_DOMAIN_ID for web_video_server (must match camera.ros_domain_id)",
+    )
+
+    env_tray_span_arg = DeclareLaunchArgument(
+        "env_tray_span",
+        default_value="true",
+        description="Run max_ai env_tray_span (env camera -> top-down tray view)",
     )
 
     # Pass ROS_DOMAIN_ID explicitly to each Node via additional_env — relying
@@ -65,6 +72,22 @@ def generate_launch_description():
         }],
     )
 
+    # ── env tray span ───────────────────────────────────────────────────
+    # 다른 PC가 내는 env 영상을 받아 트레이만 펴서 /observation/env_tray/... 로
+    # 낸다. 카메라 장치를 쓰지 않으므로 순차 기동에 넣지 않고, 도메인은 셸의
+    # ROS_DOMAIN_ID를 그대로 쓴다 (env 토픽이 있는 쪽).
+    env_tray_span = Node(
+        package='max_ai',
+        executable='max_ai_env_tray_span',
+        name='max_ai_env_tray_span',
+        output='screen',
+        emulate_tty=True,
+        parameters=[PathJoinSubstitution([
+            FindPackageShare('max_ai'), 'config', 'env_tray_span_config.yaml',
+        ])],
+        condition=IfCondition(LaunchConfiguration("env_tray_span")),
+    )
+
     # ── domain_bridge ───────────────────────────────────────────────────
     domain_bridge_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource([
@@ -86,5 +109,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         video_domain_arg,
+        env_tray_span_arg,
+        env_tray_span,
         *staged,
     ])

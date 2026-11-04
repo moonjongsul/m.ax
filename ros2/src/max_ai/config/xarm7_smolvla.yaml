@@ -14,7 +14,7 @@ policy:
   # eef velocity action으로 학습한 것. 구 체크포인트(state 6/8/10채널)를 주면
   # PolicyRunner가 로드 시점에 거절한다 -- 채널이 어긋나도 LeRobot은 32채널로
   # 패딩만 하고 검사하지 않아서, 안 막으면 에러 없이 틀리게 움직인다.
-  checkpoint: /workspace/m.ax/checkpoints/smolvla_xarm7_rot6d_joint_to_eef_velocity_261014/best_step_040800_loss_0.029999
+  checkpoint: /workspace/m.ax/checkpoints/smolvla_xarm7_rot6d+joint_to_eef_velocity_flip_THOR_b48x1_261103/best_step_012600_loss_0.080134
   device: cuda
   # MVLA: 목표 이름 (kit | pick | place). 프롬프트는 플래너가 중립 문장으로 만든다.
   # SmolVLA: 학습 때의 문장 그대로 (예: "pick up the black plastic object, move it

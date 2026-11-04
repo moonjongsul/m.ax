@@ -16,6 +16,8 @@
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>builtin_interfaces</exec_depend>
   <exec_depend>max_interfaces</exec_depend>
+  <!-- env_tray_span: 기준 이미지를 share/max_ai/config에서 찾는다. -->
+  <exec_depend>ament_index_python</exec_depend>
   <!-- policy_node only. The arm is driven through xarm_api services, the same
        path teleop uses. -->
   <exec_depend>xarm_msgs</exec_depend>

@@ -10,6 +10,7 @@
   <depend>rclpy</depend>
   
   <exec_depend>domain_bridge</exec_depend>
+  <exec_depend>max_ai</exec_depend>
   <exec_depend>orbbec_camera</exec_depend>
   <exec_depend>realsense2_camera</exec_depend>
   <exec_depend>webcam_ros2</exec_depend>

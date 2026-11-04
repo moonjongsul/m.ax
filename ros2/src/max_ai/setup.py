@@ -13,7 +13,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
-        ('share/' + package_name + '/config', glob('config/*.yaml')),
+        ('share/' + package_name + '/config', glob('config/*.yaml') + glob('config/*.png')),
     ],
     install_requires=['setuptools'],
     zip_safe=False,
@@ -35,6 +35,7 @@ setup(
             'max_ai_planner = max_ai.nodes.planner_node:main',
             'max_ai_recognizer = max_ai.nodes.recognizer_node:main',
             'max_ai_replay = max_ai.rollout.replay:main',
+            'max_ai_env_tray_span = max_ai.nodes.env_tray_span:main',
         ],
     },
 )

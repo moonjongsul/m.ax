@@ -14,8 +14,8 @@ LeRobot 데이터셋 HuggingFace 업로드 스크립트
 
 Usage:
     python upload_lerobot_dataset.py \
-        --dataset-dir /workspace/datasets/lerobot/manufacturing_parts_kitting_dataset \
-        --repo-id moonjongsul/manufacturing_parts_kitting_dataset \
+        --dataset-dir /workspace/datasets/lerobot/xarm7_kitting_flip_261103 \
+        --repo-id moonjongsul/xarm7_kitting_flip_261103 \
         --private
 """
 
@@ -23,13 +23,14 @@ import argparse
 from pathlib import Path
 from huggingface_hub import HfApi, whoami
 
-DB_LOCAL_PATH = "/workspace/m.ax/datasets"
+DB_LOCAL_PATH = "/workspace/m.ax/datasets/lerobot"
 HF_USER = "moonjongsul"
 
 UPLOAD = []
-UPLOAD.append("manufacturing_kitting_dataset")
-UPLOAD.append("manufacturing_kitting_dataset_flip_object")
-UPLOAD.append("manufacturing_kitting_dataset_kit_object")
+# UPLOAD.append("manufacturing_kitting_dataset")
+# UPLOAD.append("manufacturing_kitting_dataset_flip_object")
+# UPLOAD.append("manufacturing_kitting_dataset_kit_object")
+UPLOAD.append("xarm7_kitting_flip_261103")
 
 
 """
@@ -41,7 +42,7 @@ for db_name in UPLOAD:
 
 
 
-def main(dataset_dir=None, repo_id=None, private=False):
+def main(dataset_dir=None, repo_id=None, private=True):
     # parser = argparse.ArgumentParser(description="LeRobot 데이터셋 HuggingFace 업로드")
     # parser.add_argument("--dataset-dir", default=Path("/workspace/m.ax/datasets/manufacturing_kitting_dataset_kit_object"), 
     #                     type=Path, help="로컬 LeRobot 데이터셋 경로")

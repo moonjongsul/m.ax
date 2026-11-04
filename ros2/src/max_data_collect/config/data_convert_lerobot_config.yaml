@@ -3,7 +3,8 @@ lerobot:
   robot_type: xarm7
   gripper_type: parallel-jaw gripper
 
-merge_target_dir: /workspace/m.ax/datasets/xarm7
+# merge_target_dir: /workspace/m.ax/datasets/xarm7
+merge_target_dir: /workspace/m.ax/datasets/xarm_flip_261103
 
 # ── Video ────────────────────────────────────────────────────────────
 # The converter hands LeRobot the recorder's finished mp4s instead of
