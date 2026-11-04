@@ -16,7 +16,8 @@ max_ai_env_tray_span:
     tray_tracking: false
     # 트레이 윗면 모서리 (x, y): TL, TR, BR, BL. 수동이면 이 점을 그대로,
     # 자동이면 ref_image 위의 기준점으로 쓴다
-    ref_corners: [392.0, 119.0, 562.0, 133.0, 603.0, 307.0, 382.0, 321.0]
+    #             x1     y1     x2     y2     x3     y3     x4     y4  
+    ref_corners: [392.0, 119.0, 562.0, 133.0, 603.0, 325.0, 382.0, 321.0]
     # 자동일 때만 읽는다. 상대 경로는 설치된 share/max_ai/config 기준
     ref_image: env_img.png
     # 모서리 좌표계 = 기준 이미지 크기. 입력은 추적 전에 이 크기로 줄인다

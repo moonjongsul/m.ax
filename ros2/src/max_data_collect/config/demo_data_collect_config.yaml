@@ -20,7 +20,7 @@ max_data_collect:
 
     output_dir: /workspace/m.ax/datasets
     # dataset_name: kitting_dataset_xarm7_pick_kit_260826
-    dataset_name: kitting_dataset_xarm7_kit_261103
+    dataset_name: kitting_dataset_xarm7_kit_261104
 
     # ── Task / prompts ───────────────────────────────────────────────
     task:
