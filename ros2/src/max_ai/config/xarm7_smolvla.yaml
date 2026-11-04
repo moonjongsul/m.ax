@@ -23,7 +23,8 @@ policy:
   # task: "pick up the black plastic object"   # pick
   # task: "place the black plastic object in the white tray"    # kit
   # task: "pick up the black plastic object, move it to the white tray, and place it in the tray"    # pick & kit
-  task: "flip the black plastic object upside down then pick it up, move it to the white tray, and place it in the tray"    # flip & pick & kit
+  # task: "flip the black plastic object upside down then pick it up, move it to the white tray, and place it in the tray"    # flip & pick & kit
+  task: "flip the black plastic object upside down"
 
   # flow-matching denoising 스텝. null이면 체크포인트 값(10).
   num_inference_steps: null

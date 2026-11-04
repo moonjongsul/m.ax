@@ -26,15 +26,15 @@ policy:
   # `to_bfloat16_for_selected_params`) 피크 사용량이 파일 크기보다 훨씬 크다.
   # RAM 30GB / VRAM 16GB 노트북에서는 OOM으로 죽는다 -- 실측 확인.
   # 더 큰 머신에서 돌릴 것.
-  checkpoint: /workspace/m.ax/checkpoints/pi05_xarm7_rot6d_joint_to_eef_velocity_261014/best_step_018300_loss_0.024052
+  checkpoint: /workspace/m.ax/checkpoints/pi05_xarm7_rot6d_joint_to_eef_velocity_261014/best_step_021600_loss_0.021416
   device: cuda
   # 학습 때의 문장 그대로. RunPolicy goal의 task_instruction이 이것을 덮어쓰고,
   # 이 노드는 task_instruction 없는 goal을 거절한다.
   # task: "grasp the black plastic object, flip it upside down, pick it up"   # flip & pick 
   # task: "pick up the black plastic object"   # pick
   # task: "place the black plastic object in the white tray"    # kit
-  # task: "pick up the black plastic object, move it to the white tray, and place it in the tray"    # pick & kit
-  task: "flip the black plastic object upside down then pick it up, move it to the white tray, and place it in the tray"    # flip & pick & kit
+  task: "pick up the black plastic object, move it to the white tray, and place it in the tray"    # pick & kit
+  # task: "flip the black plastic object upside down then pick it up, move it to the white tray, and place it in the tray"    # flip & pick & kit
 
   # flow-matching denoising 스텝. null이면 체크포인트 값(pi0.5도 10).
   # pi0.5는 이 값을 `config.num_inference_steps`에 담는다(SmolVLA는
@@ -63,7 +63,7 @@ control:
 
 safety:
   # 모든 속도에 곱한다. 첫 실기는 0.3~0.5로 시작할 것.
-  speed_scale: 0.5
+  speed_scale: 1.0
   # 축별 절대 상한. 데이터셋 action의 min/max(±0.25 m/s, ±0.6 rad/s)와 같다.
   max_linear: 0.25          # m/s
   max_angular: 0.6          # rad/s

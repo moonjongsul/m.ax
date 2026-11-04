@@ -35,7 +35,7 @@ def generate_launch_description():
         name='wrist_front',
         output='screen',
         emulate_tty=True,
-        additional_env=cam_env,
+        # additional_env=cam_env,
         parameters=[{
             'serial_no': '_335122271613',
             'enable_depth': False,
